@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -73,6 +74,7 @@ function MarginBadge({ flag }: { flag: string | null }) {
 // ─── Tab components ───────────────────────────────────────────
 
 function MenusTab({ categories }: { categories: Category[] }) {
+  const router = useRouter();
   const [data, setData] = useState<MenuRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -82,11 +84,6 @@ function MenusTab({ categories }: { categories: Category[] }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [toastInfo, setToastInfo] = useState<{ show: boolean; msg: string; type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'info' });
-
-  const [detailModal, setDetailModal] = useState<number | null>(null);
-  const [detailData, setDetailData] = useState<any>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [newPrice, setNewPrice] = useState<string>('');
 
   const [deleteMenuConfirm, setDeleteMenuConfirm] = useState<number | null>(null);
   const [deletingMenu, setDeletingMenu] = useState(false);
@@ -171,42 +168,20 @@ function MenusTab({ categories }: { categories: Category[] }) {
   }, [search, catId, marginFlag, page, limit]);
 
   const openDetail = async (menuId: number) => {
-    setDetailModal(menuId);
-    setDetailLoading(true);
-    setDetailData(null);
     try {
       const res = await fetch(`/api/hpp/menus/${menuId}`);
       if (res.ok) {
         const d = await res.json();
-        setDetailData(d);
-        setNewPrice(d.menu.sale_price ? Math.round(Number(d.menu.sale_price)).toString() : '0');
-      }
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleSavePrice = async () => {
-    if (!detailModal || !detailData) return;
-    const sale_price = parseFloat(newPrice);
-    if (isNaN(sale_price) || sale_price < 0) return setToastInfo({ show: true, msg: 'Nominal harga tidak valid', type: 'error' });
-
-    try {
-      const res = await fetch(`/api/hpp/menus/${detailModal}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sale_price })
-      });
-      if (res.ok) {
-        setDetailModal(null);
-        setToastInfo({ show: true, msg: 'Harga jual berhasil disimpan', type: 'success' });
-        load();
+        if (d.ingredients?.length > 0) {
+          router.push(`/hpp/recipe-builder/${d.ingredients[0].recipe_id}`);
+        } else {
+          router.push(`/hpp/recipe-builder/new?menu_id=${menuId}`);
+        }
       } else {
-        const err = await res.json();
-        setToastInfo({ show: true, msg: 'Gagal: ' + (err.error || 'Unknown error'), type: 'error' });
+        setToastInfo({ show: true, msg: 'Gagal memuat resep', type: 'error' });
       }
-    } catch (e: unknown) {
-      setToastInfo({ show: true, msg: e instanceof Error ? e.message : 'Unknown error', type: 'error' });
+    } catch (e) {
+      setToastInfo({ show: true, msg: 'Gagal membuka resep', type: 'error' });
     }
   };
 
@@ -340,12 +315,12 @@ function MenusTab({ categories }: { categories: Category[] }) {
                   <th className="right">% HPP</th>
                   <th className="right">% Margin</th>
                   <th className="center">Status</th>
-                  <th className="center" style={{ width: 50 }}></th>
+                  <th className="right" style={{ width: 90 }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {data.map(row => (
-                  <tr key={row.id} onClick={() => openDetail(row.id)} style={{ cursor: 'pointer' }}>
+                  <tr key={row.id}>
                     <td><span style={{ fontSize: 12, color: 'var(--muted)', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}>{row.category_name}</span></td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{row.name}</div>
@@ -363,15 +338,25 @@ function MenusTab({ categories }: { categories: Category[] }) {
                       {row.hpp_ratio == null ? '—' : pct(1 - row.hpp_ratio)}
                     </td>
                     <td className="center"><MarginBadge flag={row.margin_flag} /></td>
-                    <td className="center" onClick={e => e.stopPropagation()}>
-                      <button
-                        className="btn btn-sm"
-                        style={{ padding: '4px', color: '#ef4444', background: 'transparent' }}
-                        onClick={() => setDeleteMenuConfirm(row.id)}
-                        title="Hapus Menu"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                    <td className="right">
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+                        <button
+                          className="btn btn-sm"
+                          style={{ padding: '6px', color: '#3b82f6', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}
+                          onClick={() => openDetail(row.id)}
+                          title="Edit Resep"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          style={{ padding: '6px', color: '#ef4444', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}
+                          onClick={() => setDeleteMenuConfirm(row.id)}
+                          title="Hapus Menu"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -389,87 +374,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
         itemsPerPage={limit}
         onPageChange={setPage}
       />
-      <Modal isOpen={!!detailModal} onClose={() => setDetailModal(null)} title="Detail Menu & HPP" maxWidth={680}>
-        {detailLoading ? (
-          <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--muted)' }}>Memuat detail...</div>
-        ) : detailData ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Header Info */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0 4px' }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{detailData.menu.display_name ?? detailData.menu.name}</div>
-                {detailData.menu.variant && <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{detailData.menu.variant}</div>}
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', gap: '24px' }}>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Harga Jual</div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)' }}>{rp(detailData.menu.sale_price)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Biaya Dasar (HPP)</div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--text)' }}>{rp(detailData.menu.hpp)}</div>
-                </div>
-              </div>
-            </div>
 
-
-
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Komposisi Bahan Baku (Resep)</div>
-                {detailData.ingredients?.length > 0 ? (
-                  <a href={`/hpp/recipe-builder/${detailData.ingredients[0].recipe_id}`} className="btn btn-sm btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Pencil size={12} /> Edit Resep
-                  </a>
-                ) : (
-                  <a href={`/hpp/recipe-builder/new?menu_id=${detailModal}`} className="btn btn-sm btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>Buat Resep</a>
-                )}
-              </div>
-              {detailData.ingredients?.length === 0 ? (
-                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-                  Tidak ada resep yang tertaut ke menu ini.
-                </div>
-              ) : (
-                <div className="table-responsive" style={{ border: '1px solid var(--border)', borderRadius: 8 }}>
-                  <Table>
-                    <thead>
-                      <tr>
-                        <th>Bahan Baku</th>
-                        <th className="right">Jml</th>
-                        <th className="center">Satuan</th>
-                        <th className="right">Harga/Satuan</th>
-                        <th className="right">Total Biaya</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailData.ingredients.map((ing: any) => (
-                        <tr key={ing.id}>
-                          <td style={{ fontWeight: 500 }}>{ing.ingredient_name}</td>
-                          <td className="right">{Number(ing.qty).toLocaleString('id-ID')}</td>
-                          <td className="center" style={{ color: 'var(--muted)', fontSize: 12 }}>{ing.unit}</td>
-                          <td className="right" style={{ color: 'var(--muted)' }}>{Math.round(ing.cost_per_unit || 0).toLocaleString('id-ID')}</td>
-                          <td className="right" style={{ fontWeight: 600 }}>{Math.round(ing.cost || 0).toLocaleString('id-ID')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr style={{ background: '#f8fafc', borderTop: '2px solid var(--border)' }}>
-                        <td colSpan={3} style={{ padding: '10px 14px', fontSize: 13 }}></td>
-                        <td className="right" style={{ fontWeight: 600, fontSize: 13, padding: '10px 14px' }}>Total Biaya Bahan Baku</td>
-                        <td className="right" style={{ fontWeight: 700, color: '#0f172a', fontSize: 14, padding: '10px 14px' }}>
-                          {Math.round(detailData.ingredients.reduce((sum: number, i: { cost: number | string }) => sum + Number(i.cost || 0), 0)).toLocaleString('id-ID')}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </Table>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: 20, textAlign: 'center', color: 'red' }}>Gagal memuat data.</div>
-        )}
-      </Modal>
 
       <ConfirmDialog
         open={!!deleteMenuConfirm}

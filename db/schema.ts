@@ -1,15 +1,12 @@
-/**
- * Drizzle schema placeholder for migrate tooling only.
- *
- * DO NOT import this file from app/api or lib/queries.
- * Runtime data access must use raw parameterized SQL in lib/queries/{model}.ts.
- *
- * Physical source of truth for the initial schema:
- * - db/migrations/0000_init.sql (and drizzle/0000_init.sql)
- * - Original dump: neondb-sunrise.sql
- *
- * Future schema changes: edit this file, then `npm run db:generate`,
- * review the SQL, and apply with `npm run db:migrate`.
- */
+import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
-export {};
+// Contoh skema. 
+// PERHATIAN: Drizzle di proyek ini HANYA digunakan untuk keperluan migrasi (drizzle-kit).
+// Dilarang keras menggunakan Drizzle sebagai query builder / ORM pada saat runtime sesuai aturan AGENTS.md.
+// Silakan definisikan skema Anda di sini untuk di-generate menjadi SQL migrasi.
+
+// export const exampleTable = pgTable('example', {
+//   id: serial('id').primaryKey(),
+//   name: text('name').notNull(),
+//   createdAt: timestamp('created_at').defaultNow(),
+// });

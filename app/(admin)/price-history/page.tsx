@@ -5,12 +5,16 @@ import { Table } from '@/components/ui/Table';
 import { Select } from '@/components/ui/Select';
 import { Pagination } from '@/components/ui/Pagination';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useSearchParams } from 'next/navigation';
 
 export default function PriceHistoryPage() {
+  const searchParams = useSearchParams();
+  const initItemId = searchParams?.get('item_id') || '';
+
   const [vendors, setVendors] = useState<{ id: number; name: string }[]>([]);
   const [items, setItems] = useState<{ id: number; name: string; parent_id?: number | null }[]>([]);
 
-  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [selectedItemId, setSelectedItemId] = useState<string>(initItemId);
   const [selectedVendorId, setSelectedVendorId] = useState<string>('');
 
   const [history, setHistory] = useState<Record<string, unknown>[]>([]);

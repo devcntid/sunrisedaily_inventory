@@ -41,16 +41,6 @@ export async function createDirectPurchase(input: DirectPurchaseInput) {
         [dpId, item.item_id, item.brand_id || null, item.shop_name, item.qty, item.unit, item.unit_price, item.subtotal]
       );
 
-      // Inventory movement
-      await client.query(
-        `INSERT INTO inventory_movements 
-         (item_id, brand_id, type, qty, reference_id, reference_type, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [item.item_id, item.brand_id || null, 'DIRECT_PURCHASE', item.smallest_qty, dpId, 'DIRECT_PURCHASE', `Belanja Pasar di ${item.shop_name}`]
-      );
-
-
-
       // 1. Fetch current stock
       const effectiveItemId = item.brand_id ? item.brand_id : item.item_id;
       let currentStock = stockMap.get(effectiveItemId);

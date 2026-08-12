@@ -54,3 +54,4 @@ db/seeds/*_from_dump.sql
 # misc local artifacts
 *.pem
 .turbo/
+/require/*

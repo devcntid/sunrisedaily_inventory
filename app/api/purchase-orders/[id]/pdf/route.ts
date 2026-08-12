@@ -98,7 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${poNum.replace(/\//g, '_')}.pdf"`,
+      'Content-Disposition': `inline; filename="${new Date(po.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}.pdf"`,
     },
   });
 }

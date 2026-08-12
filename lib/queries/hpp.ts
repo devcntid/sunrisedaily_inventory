@@ -450,6 +450,23 @@ export async function getHppVsSale(opts?: {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const res = await query<HppVsaleRow>(`
+    WITH v_hpp_vs_sale AS (
+      SELECT 
+        COALESCE(c.name, '—') AS category,
+        m.name AS menu_name,
+        m.variant,
+        m.sale_price,
+        m.hpp,
+        m.hpp_ratio AS hpp_pct,
+        CASE
+          WHEN m.hpp_ratio IS NULL THEN 'RED'
+          WHEN m.hpp_ratio < 0.35 THEN 'GREEN'
+          WHEN m.hpp_ratio < 0.50 THEN 'YELLOW'
+          ELSE 'RED'
+        END AS margin_flag
+      FROM menus m
+      LEFT JOIN menu_categories c ON c.id = m.category_id
+    )
     SELECT category, menu_name, variant, sale_price, hpp, hpp_pct, margin_flag
     FROM v_hpp_vs_sale
     ${where}
@@ -461,6 +478,19 @@ export async function getHppVsSale(opts?: {
 
 export async function getHppKitchenSummary(): Promise<HppKitchenSummary[]> {
   const res = await query<HppKitchenSummary>(`
+    WITH v_kitchen_hpp_summary AS (
+      SELECT
+        r.name AS recipe_name,
+        r.yield AS yield_amount,
+        r.yield_unit,
+        COALESCE(r.sale_price, m.sale_price, 0) AS sale_price,
+        r.subtotal AS raw_cost,
+        r.total_cost AS total_cost_with_xfactor,
+        r.total_cost / NULLIF(r.yield, 0) AS cost_per_unit_yield,
+        (r.total_cost / NULLIF(r.yield, 0)) / NULLIF(COALESCE(r.sale_price, m.sale_price), 0) AS hpp_ratio_pct
+      FROM recipes r
+      LEFT JOIN menus m ON m.id = r.menu_id
+    )
     SELECT 
       recipe_name, yield_amount, yield_unit,
       sale_price, raw_cost, total_cost_with_xfactor,
@@ -493,6 +523,17 @@ export async function getHppStats(): Promise<{
       GROUP BY v.id, v.name ORDER BY v.id
     `),
     query<{ flag: string; count: number }>(`
+      WITH v_hpp_vs_sale AS (
+        SELECT 
+          m.hpp,
+          CASE
+            WHEN m.hpp_ratio IS NULL THEN 'RED'
+            WHEN m.hpp_ratio < 0.35 THEN 'GREEN'
+            WHEN m.hpp_ratio < 0.50 THEN 'YELLOW'
+            ELSE 'RED'
+          END AS margin_flag
+        FROM menus m
+      )
       SELECT margin_flag AS flag, COUNT(*)::int AS count
       FROM v_hpp_vs_sale
       WHERE hpp IS NOT NULL

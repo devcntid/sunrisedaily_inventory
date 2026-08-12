@@ -461,7 +461,8 @@ export default function PurchaseOrdersPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `PO-${draftPO.po_number.replace(/\//g, '_')}.pdf`;
+        const formattedDate = draftPO.order_date ? new Date(draftPO.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : 'PO';
+        a.download = `${formattedDate}.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1139,7 +1140,7 @@ export default function PurchaseOrdersPage() {
               >
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{draftPO?.po_number || 'Purchase_Order'}.pdf</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{draftPO?.order_date ? new Date(draftPO.order_date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-') : 'Purchase_Order'}.pdf</div>
                   <div style={{ fontSize: 11, color: '#64748b' }}>Dokumen Terlampir &bull; Klik untuk pratinjau</div>
                 </div>
                 {!pdfPreviewUrl && (

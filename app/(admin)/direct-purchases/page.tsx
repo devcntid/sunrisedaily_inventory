@@ -118,12 +118,16 @@ export default function DirectPurchasesPage() {
                     <th className="center">Total Item</th>
                     <th className="right">Total Nominal</th>
                     <th>Catatan</th>
-                    <th className="center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(p => (
-                    <tr key={p.id}>
+                    <tr 
+                      key={p.id} 
+                      onClick={() => handleOpenDetail(p.id)}
+                      style={{ cursor: 'pointer' }}
+                      title="Klik baris untuk melihat detail"
+                    >
                       <td className="font-bold">
                         {new Date(p.purchase_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </td>
@@ -140,11 +144,6 @@ export default function DirectPurchasesPage() {
                       <td className="muted" style={{ maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {p.notes || '-'}
                       </td>
-                      <td className="center">
-                        <Button variant="outline" size="sm" onClick={() => handleOpenDetail(p.id)}>
-                          Detail
-                        </Button>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -154,7 +153,7 @@ export default function DirectPurchasesPage() {
         </div>
       </div>
 
-      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title="Detail Belanja Pasar">
+      <Modal isOpen={detailModalOpen} onClose={() => setDetailModalOpen(false)} title="Detail Belanja Pasar" maxWidth={850}>
         {detailLoading ? (
           <div className="center muted" style={{ padding: 40 }}>Memuat rincian...</div>
         ) : selectedDetail ? (
@@ -185,39 +184,48 @@ export default function DirectPurchasesPage() {
                   <tr>
                     <th>Bahan / Barang</th>
                     <th>Toko / Vendor</th>
+                    <th>Catatan Barang</th>
                     <th className="right">Kuantitas</th>
                     <th className="right">Harga Satuan</th>
                     <th className="right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedDetail.items?.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td>
-                        <div className="font-bold">{item.item_name}</div>
-                        {item.brand_name && <div className="muted" style={{ fontSize: 12 }}>Merek: {item.brand_name}</div>}
-                      </td>
-                      <td>{item.shop_name}</td>
-                      <td className="right font-bold">
-                        {item.qty} {item.unit}
-                      </td>
-                      <td className="right">Rp {Number(item.unit_price).toLocaleString('id-ID')}</td>
-                      <td className="right font-bold">Rp {Number(item.subtotal).toLocaleString('id-ID')}</td>
-                    </tr>
-                  ))}
+                  {selectedDetail.items?.map((item: any, idx: number) => {
+                    let displayShop = item.shop_name || '-';
+                    let displayNote = '-';
+                    const match = displayShop.match(/^(.*?) \((.*?)\)$/);
+                    if (match) {
+                      displayShop = match[1];
+                      displayNote = match[2];
+                    }
+                    return (
+                      <tr key={idx}>
+                        <td>
+                          <div className="font-bold">{item.item_name}</div>
+                          {item.brand_name && <div className="muted" style={{ fontSize: 12 }}>Merek: {item.brand_name}</div>}
+                        </td>
+                        <td>{displayShop}</td>
+                        <td className="muted">{displayNote}</td>
+                        <td className="right font-bold">
+                          {item.qty} {item.unit}
+                        </td>
+                        <td className="right">Rp {Number(item.unit_price).toLocaleString('id-ID')}</td>
+                        <td className="right font-bold">Rp {Number(item.subtotal).toLocaleString('id-ID')}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
-                  <tr>
-                    <td colSpan={4} className="right font-bold">Total Pembelanjaan</td>
-                    <td className="right font-bold text-primary">Rp {Number(selectedDetail.total_amount).toLocaleString('id-ID')}</td>
+                  <tr style={{ borderTop: '2px solid var(--border)' }}>
+                    <td colSpan={4}></td>
+                    <td className="right font-bold" style={{ whiteSpace: 'nowrap' }}>Total Pembelanjaan</td>
+                    <td className="right font-bold text-primary" style={{ whiteSpace: 'nowrap' }}>Rp {Number(selectedDetail.total_amount).toLocaleString('id-ID')}</td>
                   </tr>
                 </tfoot>
               </Table>
             </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
-              <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Tutup</Button>
-            </div>
+          
           </div>
         ) : (
           <div className="center muted" style={{ padding: 40 }}>Data tidak ditemukan.</div>

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -138,6 +139,7 @@ function InfoTooltip({ text, align = 'right', width = 230 }: { text: string; ali
 }
 
 export default function ItemsPage() {
+  const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -156,6 +158,27 @@ export default function ItemsPage() {
   const [error, setError] = useState('');
   const [toastInfo, setToastInfo] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'info' });
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+
+  // Price History Modal
+  const [priceHistoryItem, setPriceHistoryItem] = useState<Item | null>(null);
+  const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
+  const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
+  const [priceHistoryStartDate, setPriceHistoryStartDate] = useState('');
+  const [priceHistoryEndDate, setPriceHistoryEndDate] = useState('');
+
+  async function openPriceHistory(item: Item) {
+    setPriceHistoryItem(item);
+    setLoadingPriceHistory(true);
+    try {
+      const res = await fetch(`/api/price-history?item_id=${item.id}&limit=50`);
+      const data = await res.json();
+      setPriceHistoryData(data.data ?? []);
+    } catch (err) {
+      setToastInfo({ show: true, msg: 'Gagal memuat riwayat harga', type: 'error' });
+    } finally {
+      setLoadingPriceHistory(false);
+    }
+  }
 
   // Stock Card
   const [confirmDelete, setConfirmDelete] = useState<Item | null>(null);
@@ -266,10 +289,10 @@ export default function ItemsPage() {
       const method = editing ? 'PATCH' : 'POST';
       const { package_inner_size, has_conversion, purchase_price, ...cleanForm } = form;
 
-      const finalRatio = Number(form.conversion_ratio) || 1;
+      const finalRatio = form.has_brands ? 1 : (Number(form.conversion_ratio) || 1);
       const finalSmallestUnit = form.smallest_unit;
       const finalAvgPrice = form.has_brands ? 0 : (Number(purchase_price) / finalRatio);
-      const finalPurchaseUnit = form.purchase_unit;
+      const finalPurchaseUnit = form.has_brands ? form.smallest_unit : form.purchase_unit;
 
       const minThresholdSmall = Number(form.minimum_threshold) * finalRatio;
       const targetStockSmall = Number(form.target_stock) * finalRatio;
@@ -579,6 +602,9 @@ export default function ItemsPage() {
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
                               <Button size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }} title={isParent ? "Edit Induk" : "Edit Barang"} style={{ background: 'var(--blue-light)', color: 'var(--blue)', border: '1px solid #bcdcf3' }}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                              </Button>
+                              <Button size="sm" onClick={(e) => { e.stopPropagation(); openPriceHistory(item); }} title="Lihat Riwayat Harga" style={{ background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>
                               </Button>
                               <Button size="sm" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }} onClick={(e) => { e.stopPropagation(); setConfirmDelete(item); }} title="Hapus Barang">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
@@ -1117,7 +1143,7 @@ export default function ItemsPage() {
       <ConfirmDialog
         open={!!confirmDelete}
         title="Hapus Barang"
-        message={`Apakah Anda yakin ingin menghapus barang ${confirmDelete?.name}? Tindakan ini tidak dapat dibatalkan.`}
+        message={`Apakah Anda yakin ingin menghapus barang ${confirmDelete?.name}?`}
         confirmText={isDeleting ? 'Menghapus...' : 'Ya, Hapus Barang'}
         onCancel={() => setConfirmDelete(null)}
         onConfirm={handleDelete}
@@ -1176,6 +1202,70 @@ export default function ItemsPage() {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!priceHistoryItem}
+        onClose={() => { setPriceHistoryItem(null); setPriceHistoryData([]); setPriceHistoryStartDate(''); setPriceHistoryEndDate(''); }}
+        title={`Riwayat Harga — ${priceHistoryItem?.name}`}
+        maxWidth={900}
+      >
+        <div style={{ padding: 0 }}>
+          <div style={{ padding: '16px', background: '#f8fafc', borderBottom: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}></span>
+            <input type="date" className="input" style={{ width: 140, height: 34 }} value={priceHistoryStartDate} onChange={e => setPriceHistoryStartDate(e.target.value)} />
+            <span style={{ color: 'var(--muted)' }}>—</span>
+            <input type="date" className="input" style={{ width: 140, height: 34 }} value={priceHistoryEndDate} onChange={e => setPriceHistoryEndDate(e.target.value)} />
+            {(priceHistoryStartDate || priceHistoryEndDate) && (
+              <button type="button" onClick={() => { setPriceHistoryStartDate(''); setPriceHistoryEndDate(''); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Reset</button>
+            )}
+          </div>
+          <div className="card-body flush">
+            {loadingPriceHistory ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Memuat riwayat harga...</div>
+            ) : priceHistoryData.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Belum ada riwayat harga untuk barang ini.</div>
+            ) : (
+              <div className="table-responsive" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <Table style={{ margin: 0 }}>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f1f5f9' }}>
+                    <tr>
+                      <th>Tanggal</th>
+                      <th>Vendor</th>
+                      <th className="right">Jml Diterima</th>
+                      <th className="right">Harga Beli</th>
+                      <th className="right">MA Baru</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {priceHistoryData.filter((h: any) => {
+                      if (!priceHistoryStartDate && !priceHistoryEndDate) return true;
+                      const d = new Date(h.purchase_date).getTime();
+                      const start = priceHistoryStartDate ? new Date(priceHistoryStartDate).getTime() : 0;
+                      const end = priceHistoryEndDate ? new Date(priceHistoryEndDate + 'T23:59:59').getTime() : Infinity;
+                      return d >= start && d <= end;
+                    }).map((h: any) => (
+                      <tr key={h.id}>
+                        <td>
+                          {new Date(String(h.purchase_date)).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          <div className="muted font-mono" style={{ fontSize: 11 }}>{h.purchase_order_item_id ? `PO: ${h.purchase_order_item_id}` : 'Manual'}</div>
+                        </td>
+                        <td>{h.vendor_name || '-'}</td>
+                        <td className="right font-bold num">{Number(h.purchase_qty).toLocaleString('id-ID', { maximumFractionDigits: 2 })} <span className="muted">{h.purchase_unit}</span></td>
+                        <td className="right font-mono" style={{ color: '#016e3f', fontWeight: 600 }}>
+                          Rp {Number(h.unit_purchase_price).toLocaleString('id-ID')}
+                        </td>
+                        <td className="right font-mono" style={{ color: '#f59e0b', fontWeight: 600 }}>
+                          Rp {Number(h.new_average_price).toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 

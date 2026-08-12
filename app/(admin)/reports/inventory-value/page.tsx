@@ -178,7 +178,7 @@ export default function InventoryValueTablePage() {
               </tbody>
               <tfoot style={{ position: 'sticky', bottom: 0, zIndex: 10, boxShadow: '0 -2px 10px rgba(0,0,0,0.05)' }}>
                 <tr style={{ background: '#f1f5f9', fontWeight: 700, borderTop: '2px solid var(--border)', fontSize: 12 }}>
-                  <td colSpan={2} className="right" style={{ padding: '12px 24px' }}>TOTAL KESELURUHAN (FILTERED)</td>
+                  <td colSpan={2} style={{ padding: '12px 24px' }}>TOTAL KESELURUHAN</td>
                   <td className="right num" style={{ padding: '12px 24px' }}>Rp {grandTotalIn.toLocaleString('id-ID')}</td>
                   <td className="right num" style={{ padding: '12px 24px' }}>Rp {grandTotalDist.toLocaleString('id-ID')}</td>
                   <td className="right num" style={{ padding: '12px 24px', color: '#dc2626' }}>Rp {grandTotalAdj.toLocaleString('id-ID')}</td>

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Plus, Trash2, Save } from 'lucide-react';
+import { ChevronLeft, Plus, Trash2, Save, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 import { Table } from '@/components/ui/Table';
 import { Toast } from '@/components/ui/Toast';
@@ -183,6 +183,22 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
     }));
   };
 
+  const handleSyncHPP = () => {
+    setIngredients(prev => prev.map(ing => {
+      const active = availableIngredients.find(a => String(a.id) === ing.ingredient_id);
+      if (active) {
+        const newCost = Number(active.standard_cost_per_unit) || 0;
+        return {
+          ...ing,
+          cost_per_unit: newCost,
+          extension: Number(ing.quantity) * newCost
+        };
+      }
+      return ing;
+    }));
+    setToastInfo({ show: true, msg: 'Harga HPP berhasil disinkronkan dengan Master Data terbaru.', type: 'success' });
+  };
+
   const handleSave = async () => {
     if (!form.name || !form.venue_id || !form.category_id || !form.yield_amount || !form.yield_unit || form.x_factor_pct === '' || form.sale_price === '') {
       setToastInfo({ show: true, msg: 'Harap isi semua kolom wajib.', type: 'error' });
@@ -339,9 +355,16 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
             <div>
               <h3 style={{ fontSize: 13, margin: 0, fontWeight: 700 }}>Komposisi Bahan Baku</h3>
             </div>
-            <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 10px', height: 28, background: '#edf7f2', color: '#016e3f', border: '1px solid #a8dab5', fontWeight: 600 }} onClick={handleAddIngredient}>
-              <Plus size={13} /> Tambah Bahan
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {ingredients.length > 0 && (
+                <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 10px', height: 28, background: '#fffbeb', color: '#d97706', border: '1px solid #fcd34d', fontWeight: 600 }} onClick={handleSyncHPP} title="Update harga bahan baku sesuai dengan HPP Master Data terbaru">
+                  <RefreshCw size={13} /> Sync HPP
+                </button>
+              )}
+              <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '4px 10px', height: 28, background: '#edf7f2', color: '#016e3f', border: '1px solid #a8dab5', fontWeight: 600 }} onClick={handleAddIngredient}>
+                <Plus size={13} /> Tambah Bahan
+              </button>
+            </div>
           </div>
 
           <div className="card-body flush" style={{ overflow: 'visible' }}>

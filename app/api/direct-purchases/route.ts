@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const session = await getSession();
-    if (!(session as any)?.id) return new NextResponse('Unauthorized', { status: 401 });
+    if (!session?.userId) return new NextResponse('Unauthorized', { status: 401 });
 
     const body = await request.json();
     
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const payload: DirectPurchaseInput = {
       receipt_number: body.receipt_number,
       notes: body.notes,
-      created_by: Number((session as any)?.id),
+      created_by: session.userId,
       total_amount: body.total_amount,
       items: body.items.map((i: any) => ({
         item_id: Number(i.item_id),

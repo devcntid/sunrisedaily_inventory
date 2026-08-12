@@ -46,7 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       text: message || `Dear Vendor,\n\nPlease find attached our Purchase Order ${poNumber}.\n\nThank you,\nSunrise Daily Purchasing`,
       attachments: [
         {
-          filename: `${poNumber || 'PO'}.pdf`,
+          filename: `PO_${poNumber || id}.pdf`,
           content: pdfBase64.split('base64,')[1] || pdfBase64,
           encoding: 'base64',
           contentType: 'application/pdf'
