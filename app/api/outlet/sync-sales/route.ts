@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { getAllActiveMokaTokens } from '@/lib/queries/moka';
+import { getAllActiveMokaTokens, deactivateMokaAccount } from '@/lib/queries/moka';
 import { getOutletMokaBusinessId, updateOutletMokaBusinessId } from '@/lib/queries/master';
 import { syncTransactions } from '@/lib/queries/moka_transactions';
 import { deductOutletStockFromSales } from '@/lib/queries/outlet-inventory';
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Sync from Moka using only the correct token
     const syncResult = await syncTransactions(correctToken as any, sinceEpoch, untilEpoch, outletId.toString());
     if (!syncResult.success) {
-      throw new Error(syncResult.message || 'Failed to sync transactions from Moka');
+      throw new Error(syncResult.message || 'Gagal Sinkronisasi data dari Moka');
     }
 
     // 2. Deduct from Inventory
@@ -70,6 +70,29 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('[POST /api/outlet/sync-sales]', error);
+
+    // Jika refresh token sudah kadaluarsa/dicabut Moka → nonaktifkan akun & minta re-otorisasi
+    if (error instanceof Error && error.message === 'auth_expired') {
+      // Cari businessId dari token yang sedang dipakai, lalu nonaktifkan
+      try {
+        const tokens = await getAllActiveMokaTokens();
+        // Nonaktifkan semua token yang refresh-nya gagal (heuristik: token paling lama)
+        if (tokens.length > 0) {
+          // Nonaktifkan token pertama yang cocok dengan outlet ini
+          // (bisnis ID sudah diketahui dari loop di atas, nonaktifkan yang relevan)
+          for (const t of tokens) {
+            await deactivateMokaAccount(Number(t.business_id));
+          }
+        }
+      } catch (_) { /* abaikan error di cleanup */ }
+
+      return NextResponse.json({
+        success: false,
+        auth_expired: true,
+        message: 'Sesi Moka POS telah kadaluarsa. Silakan buka Pengaturan Moka dan hubungkan ulang akun Anda melalui proses otorisasi OAuth.'
+      }, { status: 401 });
+    }
+
     return NextResponse.json({ success: false, message: (error instanceof Error ? error.message : 'Unknown error') }, { status: 500 });
   }
 }

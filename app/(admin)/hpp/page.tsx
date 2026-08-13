@@ -389,22 +389,45 @@ function MenusTab({ categories }: { categories: Category[] }) {
       />
 
       {/* Modal Import Preview */}
-      <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Preview Import Resep Menu" maxWidth={1000}>
+      <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Preview Import Resep Menu" maxWidth={1100}>
         <div style={{ padding: 20 }}>
           {importSummary && (
             <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ padding: 12, borderRadius: 8, background: importSummary.error > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${importSummary.error > 0 ? '#fecaca' : '#bbf7d0'}` }}>
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  <div><strong>Total Baris:</strong> {importSummary.total}</div>
-                  <div style={{ color: '#15803d' }}><strong>Valid:</strong> {importSummary.valid}</div>
-                  <div style={{ color: '#b91c1c' }}><strong>Error:</strong> {importSummary.error}</div>
+              {/* Summary Bar */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ padding: '8px 14px', borderRadius: 8, background: '#f8fafc', border: '1px solid var(--border)', fontSize: 13 }}>
+                  <strong>Total:</strong> {importSummary.total} baris
                 </div>
+                {importSummary.changed > 0 && (
+                  <div style={{ padding: '8px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fcd34d', fontSize: 13, color: '#92400e' }}>
+                    <strong>{importSummary.changed}</strong> perubahan terdeteksi
+                  </div>
+                )}
                 {importSummary.error > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 13, color: '#b91c1c' }}>
-                    Masih terdapat error pada baris data. Harap perbaiki file Excel Anda dan upload kembali.
+                  <div style={{ padding: '8px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13, color: '#b91c1c' }}>
+                    <strong>{importSummary.error}</strong> error
+                  </div>
+                )}
+                {importSummary.error === 0 && importSummary.changed === 0 && (
+                  <div style={{ padding: '8px 14px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, color: '#15803d' }}>
+                    Tidak ada perubahan dari data yang ada
                   </div>
                 )}
               </div>
+
+              {/* Legend */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fef9c3', border: '1px solid #fde047', color: '#713f12' }}>Diubah</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#dbeafe', border: '1px solid #93c5fd', color: '#1e3a8a' }}>Baru</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fee2e2', border: '1px solid #fca5a5', color: '#7f1d1d' }}>Dihapus</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#475569' }}>Sama</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>Error</span>
+              </div>
+              {importSummary.error > 0 && (
+                <div style={{ padding: 10, borderRadius: 6, background: '#fef2f2', border: '1px solid #fecaca', fontSize: 13, color: '#b91c1c' }}>
+                  ⚠️ Masih terdapat error pada data. Harap perbaiki file Excel Anda dan upload kembali sebelum melanjutkan.
+                </div>
+              )}
               
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                 <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>Batal</Button>
@@ -413,49 +436,77 @@ function MenusTab({ categories }: { categories: Category[] }) {
                   onClick={handleConfirmImport} 
                   disabled={!importSummary || importSummary.error > 0 || importingStatus}
                 >
-                  {importingStatus ? 'Menyimpan...' : 'Proses Import'}
+                  {importingStatus ? 'Menyimpan...' : `Proses Import`}
                 </Button>
               </div>
             </div>
           )}
 
-          <div style={{ maxHeight: 400, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+          <div style={{ maxHeight: 420, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
             <Table>
               <thead>
                 <tr>
-                  <th style={{ width: 60, textAlign: 'center' }}>Baris</th>
+                  <th style={{ width: 55, textAlign: 'center' }}>Baris</th>
                   <th>Menu</th>
+                  <th style={{ width: 120 }}>Varian</th>
                   <th>Bahan</th>
-                  <th style={{ textAlign: 'right' }}>Takaran</th>
-                  <th>Status</th>
+                  <th style={{ textAlign: 'right', width: 120 }}>Takaran</th>
+                  <th style={{ width: 130 }}>Perubahan</th>
                 </tr>
               </thead>
               <tbody>
-                {importPreviewData.map((row, i) => (
-                  <tr key={i} style={{ background: row.isValid ? 'transparent' : '#fef2f2' }}>
-                    <td style={{ textAlign: 'center' }}>{row.row_index}</td>
-                    <td>
-                      <div>{row.nama_menu}</div>
-                      <div className="muted" style={{ fontSize: 11 }}>ID: {row.menu_id}</div>
-                    </td>
-                    <td>
-                      <div>{row.nama_bahan}</div>
-                      <div className="muted" style={{ fontSize: 11 }}>ID: {row.bahan_id}</div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{row.takaran} {row.satuan}</td>
-                    <td>
-                      {row.isValid ? (
-                        <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                          <CheckCircle2 size={14} /> Valid
+                {importPreviewData.map((row, i) => {
+                  // Determine row background by change status
+                  const rowBg =
+                    row.changeStatus === 'CHANGED'   ? '#fefce8' :
+                    row.changeStatus === 'NEW'        ? '#eff6ff' :
+                    row.changeStatus === 'REMOVED'    ? '#fef2f2' :
+                    row.changeStatus === 'ERROR'      ? '#fef2f2' : 'transparent';
+
+                  const changeBadge = () => {
+                    if (row.changeStatus === 'CHANGED') return (
+                      <div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fef9c3', border: '1px solid #fde047', color: '#713f12', fontSize: 11, fontWeight: 600 }}>Diubah</span>
+                        {row.changeDetail && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{row.changeDetail}</div>}
+                      </div>
+                    );
+                    if (row.changeStatus === 'NEW') return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#dbeafe', border: '1px solid #93c5fd', color: '#1e3a8a', fontSize: 11, fontWeight: 600 }}>Baru</span>
+                    );
+                    if (row.changeStatus === 'REMOVED') return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fee2e2', border: '1px solid #fca5a5', color: '#7f1d1d', fontSize: 11, fontWeight: 600 }}>Dihapus</span>
+                    );
+                    if (row.changeStatus === 'ERROR') return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 4, background: '#fef2f2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: 11, fontWeight: 600 }}>Error: {row.errorMessage}</span>
+                    );
+                    return (
+                      <span style={{ color: '#94a3b8', fontSize: 12 }}>— Sama</span>
+                    );
+                  };
+
+                  return (
+                    <tr key={i} style={{ background: rowBg }}>
+                      <td style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>{row.row_index ?? '—'}</td>
+                      <td>
+                        <div style={{ fontWeight: 500, fontSize: 13 }}>{row.nama_menu}</div>
+                        <div className="muted" style={{ fontSize: 10 }}>ID: {row.menu_id}</div>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: 11, background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, color: '#475569' }}>
+                          {row.nama_varian && row.nama_varian !== '-' ? row.nama_varian : '—'}
                         </span>
-                      ) : (
-                        <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                          <XCircle size={14} /> {row.errorMessage}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td>
+                        <div style={{ fontSize: 13 }}>{row.nama_bahan}</div>
+                        <div className="muted" style={{ fontSize: 10 }}>ID: {row.bahan_id}</div>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, fontSize: 13 }}>
+                        {row.takaran != null ? `${row.takaran} ${row.satuan}` : '—'}
+                      </td>
+                      <td>{changeBadge()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </Table>
           </div>
@@ -760,7 +811,10 @@ function IngredientsTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error('Failed to save');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save');
+      }
       setModalOpen(false);
       setToastInfo({ show: true, msg: 'Bahan baku berhasil disimpan', type: 'success' });
       load();
@@ -778,7 +832,7 @@ function IngredientsTab() {
       const res = await fetch(`/api/hpp/ingredients/${deleteConfirm}`, { method: 'DELETE' });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || 'Failed to delete');
+        throw new Error(d.error || 'Gagal menghapus');
       }
       setDeleteConfirm(null);
       setToastInfo({ show: true, msg: 'Bahan baku berhasil dihapus', type: 'success' });
@@ -793,6 +847,7 @@ function IngredientsTab() {
   const totalPages = Math.ceil(total / limit);
 
   const matchingMasterItems = masterItems
+    .filter(i => !i.parent_id) // Hanya tampilkan item induk atau item single, sembunyikan varian/brand
     .filter(i => !form.name.trim() || i.name.toLowerCase().includes(form.name.trim().toLowerCase()))
     .slice(0, 50);
 
@@ -811,7 +866,7 @@ function IngredientsTab() {
             />
           </div>
           <span className="muted" style={{ fontSize: 13 }}>{total} bahan baku</span>
-          <button className="btn btn-primary" onClick={handleOpenAdd}>+ Tambah Bahan Baku</button>
+          <button className="btn btn-primary" onClick={handleOpenAdd}>+ Tambah</button>
         </div>
       </div>
 
@@ -952,8 +1007,6 @@ function IngredientsTab() {
                             setShowNameSuggestions(false);
                           }}
                         >
-                          {isParent && <span style={{ marginRight: 6 }}>📦</span>}
-                          {isChild && <span style={{ color: '#cbd5e1', marginRight: 6 }}>↳</span>}
                           {item.name}
                         </div>
                       );
@@ -961,12 +1014,30 @@ function IngredientsTab() {
                   </div>
                 )}
               </div>
-              <Input label="Satuan Default" placeholder="misal: gr, ml, pcs" value={form.default_unit} onChange={e => setForm(f => ({ ...f, default_unit: e.target.value }))} />
-              <Input label="Biaya Standar / Satuan" placeholder="Rp 0" type="number" min="0" step="any" required value={form.standard_cost_per_unit} onChange={e => setForm(f => ({ ...f, standard_cost_per_unit: e.target.value }))} />
+              <Input 
+                label="Satuan Default" 
+                placeholder="misal: gr, ml, pcs" 
+                value={form.default_unit} 
+                onChange={e => setForm(f => ({ ...f, default_unit: e.target.value }))} 
+                readOnly={!!form.item_id}
+                style={form.item_id ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' } : undefined}
+              />
+              <Input 
+                label="Biaya Standar / Satuan" 
+                placeholder="Rp 0" 
+                type="number" 
+                min="0" 
+                step="any" 
+                required 
+                value={form.standard_cost_per_unit} 
+                onChange={e => setForm(f => ({ ...f, standard_cost_per_unit: e.target.value }))} 
+                readOnly={!!form.item_id}
+                style={form.item_id ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' } : undefined}
+              />
 
               <div style={{ gridColumn: '1 / -1' }} className="form-group">
                 <label className="form-label">Deskripsi</label>
-                <textarea className="input" rows={3} placeholder="Tambahkan catatan tentang harga atau konversi satuan di sini..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+                <textarea className="input" rows={5} placeholder="Tambahkan catatan tentang harga atau konversi satuan di sini..." value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
             </div>
 
@@ -1280,12 +1351,13 @@ export default function HppPage() {
 
         {/* Venue row */}
         {/* Venue row */}
-        {stats?.byVenue && stats.byVenue.filter(v => v.count > 0).length > 0 && (
-          <div style={{ display: 'flex', gap: 16, padding: '12px 20px', borderTop: '1px solid var(--border)', background: '#f8fafc' }}>
-            {stats.byVenue.filter(v => v.count > 0).map(v => (
+        {stats?.byVenue && stats.byVenue.length > 0 && (
+          <div style={{ display: 'flex', gap: 16, padding: '12px 20px', borderTop: '1px solid var(--border)', background: '#f8fafc', flexWrap: 'wrap' }}>
+            {stats.byVenue.map(v => (
               <div key={v.venue} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
-                  background: '#016e3f', color: '#ffffff',
+                  background: v.count > 0 ? '#016e3f' : '#e2e8f0', 
+                  color: v.count > 0 ? '#ffffff' : '#64748b',
                   padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
                 }}>{v.venue}</span>
                 <span className="muted" style={{ fontSize: 12 }}>{v.count} resep</span>

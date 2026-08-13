@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     search: searchParams.get('search') ?? undefined,
     activeOnly: searchParams.get('active_only') !== 'false',
     parentOnly: searchParams.get('parent_only') === 'true', // Hanya Induk (untuk monitoring stok & opname)
+    parentId: searchParams.has('parent_id') ? Number(searchParams.get('parent_id')) : undefined,
   });
   return NextResponse.json({ success: true, message: 'OK', data: items });
 }

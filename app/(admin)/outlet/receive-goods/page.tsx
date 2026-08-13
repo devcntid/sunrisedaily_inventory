@@ -24,18 +24,14 @@ interface DeliveryNoteItem {
   qty_shipped: string | number;
   qty_received?: string | number | null;
   smallest_unit: string;
+  purchase_unit: string;
+  conversion_ratio?: string | number | null;
   scanned_in_at?: string | null;
   unique_barcode?: string | null;
   barcode?: string | null;
   discrepancy_reason?: string | null;
 }
 
-function getDisplayFormat(qty: number, unit: string) {
-  const u = (unit || '').trim().toLowerCase();
-  if (['g', 'gr', 'gram'].includes(u) && qty >= 1000) return { unit: 'kg', mult: 1000, value: qty / 1000 };
-  if (['ml', 'milliliter'].includes(u) && qty >= 1000) return { unit: 'Liter', mult: 1000, value: qty / 1000 };
-  return { unit, mult: 1, value: qty };
-}
 
 export default function ReceiveGoodsPage() {
   const searchParams = useSearchParams();
@@ -124,7 +120,7 @@ export default function ReceiveGoodsPage() {
       if (dn) {
         openScan(dn);
       } else {
-        setToast({ isOpen: true, message: `Surat Jalan ${scanParam} tidak ditemukan atau bukan berstatus DIKIRIM.`, type: 'error' });
+        setToast({ isOpen: true, message: `Surat Jalan ${scanParam} tidak ditemukan.`, type: 'error' });
       }
       setInitialScanHandled(true);
       // Remove query param from url
@@ -134,7 +130,7 @@ export default function ReceiveGoodsPage() {
 
   async function openScan(dn: DeliveryNote) {
     if (dn.status === 'DRAFT') {
-      setToast({ isOpen: true, message: 'Surat Jalan ini masih disiapkan oleh Pusat dan belum dikirim. Silakan tunggu statusnya menjadi DIKIRIM.', type: 'info' });
+      setToast({ isOpen: true, message: 'Pesanan masih diproses', type: 'info' });
       return;
     }
 
@@ -171,8 +167,8 @@ export default function ReceiveGoodsPage() {
         return;
       }
 
-      const shippedFmt = getDisplayFormat(Number(item.qty_shipped), item.smallest_unit);
-      const actualQtyReceivedBase = Number(inputQty) * shippedFmt.mult;
+      const conversionRatio = Number(item.conversion_ratio) || 1;
+      const actualQtyReceivedBase = Number(inputQty) * conversionRatio;
       const isDiscrepancy = actualQtyReceivedBase !== Number(item.qty_shipped);
       const categoryStr = discCategories[item.id] || '';
       const notesStr = discNotes[item.id] || '';
@@ -196,8 +192,8 @@ export default function ReceiveGoodsPage() {
         .filter(item => !item.scanned_in_at)
         .map(item => {
           const inputQty = qtys[item.id];
-          const shippedFmt = getDisplayFormat(Number(item.qty_shipped), item.smallest_unit);
-          const actualQtyReceivedBase = Number(inputQty) * shippedFmt.mult;
+          const conversionRatio = Number(item.conversion_ratio) || 1;
+          const actualQtyReceivedBase = Number(inputQty) * conversionRatio;
           const isDiscrepancy = actualQtyReceivedBase !== Number(item.qty_shipped);
           const notesStr = discNotes[item.id] || '';
 
@@ -265,8 +261,8 @@ export default function ReceiveGoodsPage() {
     const newQtys = { ...qtys };
     itemsList.forEach(item => {
       if (!item.scanned_in_at) {
-        const shippedFmt = getDisplayFormat(Number(item.qty_shipped), item.smallest_unit);
-        newQtys[item.id] = shippedFmt.value;
+        const conversionRatio = Number(item.conversion_ratio) || 1;
+        newQtys[item.id] = Number(item.qty_shipped) / conversionRatio;
       }
     });
     setQtys(newQtys);
@@ -277,7 +273,7 @@ export default function ReceiveGoodsPage() {
       <div className="card">
         <div className="card-head">
           <div>
-            <h3>Terima Barang (Scan IN)</h3>
+            <h3>Penerimaan Barang</h3>
           </div>
         </div>
         <div className="card-body flush">
@@ -322,11 +318,10 @@ export default function ReceiveGoodsPage() {
         </div>
       </div>
 
-      <Modal isOpen={!!scanModal} onClose={() => setScanModal(null)} title={`Terima Barang - ${scanModal?.delivery_note_number}`} maxWidth={900}>
+      <Modal isOpen={!!scanModal} onClose={() => setScanModal(null)} title={`Terima Barang - ${scanModal?.delivery_note_number}`} maxWidth={900} closeOnOutsideClick={false}>
         <div className="modal-body" style={{ padding: '16px 20px' }}>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h5 style={{ margin: 0, color: 'var(--primary)', fontSize: 16 }}>Verifikasi Barang</h5>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {scanModal?.status !== 'DITERIMA' && (
@@ -358,7 +353,7 @@ export default function ReceiveGoodsPage() {
                   </Button>
                   <form onSubmit={handleCompleteReceipt} style={{ display: 'flex', alignItems: 'center' }}>
                     <Button variant="primary" type="submit" disabled={processing || (requireBarcode && !proofImage && !previewUrl)}>
-                      {processing ? 'Menyelesaikan...' : 'Selesaikan Penerimaan'}
+                      {processing ? 'Menyelesaikan...' : 'Diterima'}
                     </Button>
                   </form>
                 </div>
@@ -368,22 +363,24 @@ export default function ReceiveGoodsPage() {
 
           <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 24, overflowX: 'auto' }}>
             <Table>
-              <thead><tr><th>Data Barang</th><th className="center">Jml Dikirim</th><th>Jml Aktual Diterima</th><th>Selisih (Jika Ada)</th><th className="center">Status</th></tr></thead>
+              <thead><tr><th>Data Barang</th><th className="center">Jml Dikirim</th><th>Jml Diterima</th><th>Selisih</th><th className="center">Status</th></tr></thead>
               <tbody>
                 {itemsList.map(item => {
-                  const shippedFmt = getDisplayFormat(Number(item.qty_shipped), item.smallest_unit);
+                  const conversionRatio = Number(item.conversion_ratio) || 1;
+                  const qtyShippedDisplay = Number(item.qty_shipped) / conversionRatio;
+                  const unitDisplay = item.purchase_unit || item.smallest_unit;
                   const isScanned = !!item.scanned_in_at;
 
                   if (isScanned) {
-                    const received = item.qty_received != null ? getDisplayFormat(Number(item.qty_received), item.smallest_unit) : null;
+                    const receivedDisplay = item.qty_received != null ? Number(item.qty_received) / conversionRatio : null;
                     return (
                       <tr key={item.id}>
                         <td className="font-bold">
                           {item.item_name}
                         </td>
-                        <td className="center num">{shippedFmt.value.toLocaleString('en-US', { maximumFractionDigits: 3 })} {shippedFmt.unit}</td>
+                        <td className="center num">{qtyShippedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} {unitDisplay}</td>
                         <td className="center num font-bold" style={{ color: item.qty_received != null && Number(item.qty_received) !== Number(item.qty_shipped) ? 'var(--danger)' : 'inherit' }}>
-                          {received != null ? `${received.value.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${received.unit}` : '-'}
+                          {receivedDisplay != null ? `${receivedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${unitDisplay}` : '-'}
                         </td>
                         <td>
                           {item.discrepancy_reason ? (
@@ -395,14 +392,14 @@ export default function ReceiveGoodsPage() {
                           )}
                         </td>
                         <td className="center">
-                          <Badge variant="green">✓ Diterima</Badge>
+                          <Badge variant="green">Diterima</Badge>
                         </td>
                       </tr>
                     );
                   }
 
                   const inputQty = qtys[item.id] !== undefined ? qtys[item.id] : '';
-                  const isDiscrepancy = inputQty !== '' && Number(inputQty) !== shippedFmt.value;
+                  const isDiscrepancy = inputQty !== '' && Number(inputQty) !== qtyShippedDisplay;
 
                   return (
                     <tr key={item.id}>
@@ -410,7 +407,7 @@ export default function ReceiveGoodsPage() {
                         <div className="font-bold">{item.item_name}</div>
                       </td>
                       <td className="center num" style={{ verticalAlign: 'top', paddingTop: 16 }}>
-                        {shippedFmt.value.toLocaleString('en-US', { maximumFractionDigits: 3 })} {shippedFmt.unit}
+                        {qtyShippedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} {unitDisplay}
                       </td>
                       <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -423,7 +420,7 @@ export default function ReceiveGoodsPage() {
                             onChange={e => setQtys({ ...qtys, [item.id]: e.target.value === '' ? '' : Number(e.target.value) })}
                             style={{ width: 100, fontSize: 13, padding: '6px 10px' }}
                           />
-                          <span style={{ fontSize: 13 }}>{shippedFmt.unit}</span>
+                          <span style={{ fontSize: 13 }}>{unitDisplay}</span>
                         </div>
                       </td>
                       <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
@@ -455,7 +452,7 @@ export default function ReceiveGoodsPage() {
                         )}
                       </td>
                       <td className="center" style={{ verticalAlign: 'top', paddingTop: 16 }}>
-                        <Badge variant="gray">Menunggu Scan</Badge>
+                        <Badge variant="gray">Belum Diterima</Badge>
                       </td>
                     </tr>
                   );

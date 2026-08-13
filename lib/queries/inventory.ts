@@ -39,17 +39,24 @@ export async function receiveGoods(input: {
   const { item_id, qty, vendor_id, unit_purchase_price, purchase_order_item_id } = input;
 
   return withTransaction(async (client) => {
-    // 1. Get current average price & stock (row lock to secure against race conditions)
+    // Determine target item for stock and HPP (if it's a brand, use its parent)
+    const targetItemRes = await client.query(
+      `SELECT id, parent_id, conversion_ratio FROM items WHERE id = $1`,
+      [item_id]
+    );
+    const stockItemId = targetItemRes.rows[0]?.parent_id || item_id;
+    const ratio = parseFloat(targetItemRes.rows[0]?.conversion_ratio || 1);
+
+    // 1. Get current average price & stock of the Target Item (row lock to secure against race conditions)
     const current = await client.query(
-      `SELECT current_average_price, conversion_ratio,
+      `SELECT current_average_price,
               (SELECT ending_balance FROM inventory_logs WHERE item_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1) AS last_balance
        FROM items WHERE id = $1 FOR UPDATE`,
-      [item_id]
+      [stockItemId]
     );
 
     const oldAvg = parseFloat(current.rows[0]?.current_average_price ?? '0');
     const oldBalance = parseFloat(current.rows[0]?.last_balance ?? '0');
-    const ratio = parseFloat(current.rows[0]?.conversion_ratio || 1);
 
     const actualQty = qty * ratio;
     const actualUnitPrice = unit_purchase_price / ratio;
@@ -62,26 +69,26 @@ export async function receiveGoods(input: {
     const newAvgPrice = effectiveNewBalance > 0 ? (oldValue + newValue) / effectiveNewBalance : actualUnitPrice;
     const newBalance = oldBalance + actualQty;
 
-    // 3. Update price cache in items
+    // 3. Update price cache in Target Item (Parent)
     await client.query(
       `UPDATE items SET current_average_price = $1, updated_at = now() WHERE id = $2`,
-      [newAvgPrice, item_id]
+      [newAvgPrice, stockItemId]
     );
 
-    // 4. Insert stock mutation log
+    // 4. Insert stock mutation log for Target Item (Parent)
     await client.query(
       `INSERT INTO inventory_logs (item_id, movement_type, qty_change, ending_balance, reference_type, reference_id)
        VALUES ($1, 'IN', $2, $3, 'RECEIPT', $4)`,
-      [item_id, actualQty, newBalance, input.purchase_order_item_id || null]
+      [stockItemId, actualQty, newBalance, input.purchase_order_item_id || null]
     );
 
-    // Auto fulfill pending outlet requests if stock arrived
-    await autoFulfillPendingRequests(client, item_id, newBalance);
+    // Auto fulfill pending outlet requests if stock arrived (using Target Item)
+    await autoFulfillPendingRequests(client, stockItemId, newBalance);
 
-    // Check reorder point to resolve any open alerts
-    await checkAndCreateAlert(item_id, newBalance, client);
+    // Check reorder point to resolve any open alerts (using Target Item)
+    await checkAndCreateAlert(stockItemId, newBalance, client);
 
-    // 5. Insert price history
+    // 5. Insert price history (tetap gunakan item_id asli / Merek agar historis PO valid)
     await client.query(
       `INSERT INTO price_history (item_id, vendor_id, purchase_date, purchase_qty, unit_purchase_price, new_average_price, purchase_order_item_id)
        VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6)`,
@@ -143,9 +150,16 @@ export async function outboundStock(input: {
 }, client?: PoolClient) {
   const doQuery = client ? client.query.bind(client) : query;
 
+  // Determine target item for stock (if it's a brand, use its parent)
+  const targetItemRes = await doQuery(
+    `SELECT id, parent_id FROM items WHERE id = $1`,
+    [input.item_id]
+  );
+  const stockItemId = targetItemRes.rows[0]?.parent_id || input.item_id;
+
   const balanceRes = await doQuery(
     `SELECT ending_balance FROM inventory_logs WHERE item_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
-    [input.item_id]
+    [stockItemId]
   );
   const currentBalance = parseFloat(balanceRes.rows[0]?.ending_balance ?? '0');
   const newBalance = currentBalance - input.qty;
@@ -153,11 +167,11 @@ export async function outboundStock(input: {
   await doQuery(
     `INSERT INTO inventory_logs (item_id, movement_type, qty_change, ending_balance, reference_type, reference_id)
      VALUES ($1, 'OUT', $2, $3, $4, $5)`,
-    [input.item_id, -input.qty, newBalance, input.reference_type, input.reference_id ?? null]
+    [stockItemId, -input.qty, newBalance, input.reference_type, input.reference_id ?? null]
   );
 
   // Check reorder point
-  await checkAndCreateAlert(input.item_id, newBalance, client);
+  await checkAndCreateAlert(stockItemId, newBalance, client);
 
   return newBalance;
 }

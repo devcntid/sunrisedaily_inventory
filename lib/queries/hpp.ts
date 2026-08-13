@@ -353,7 +353,7 @@ export async function getHppRecipeDetail(recipeId: number): Promise<{
       ri.ingredient_id, 
       COALESCE(it.name, i.name) AS ingredient_name,
       COALESCE(it.smallest_unit, i.default_unit) AS default_unit,
-      COALESCE(it.current_average_price, i.standard_cost_per_unit) AS standard_cost_per_unit,
+      COALESCE(NULLIF(it.current_average_price, 0), i.standard_cost_per_unit) AS standard_cost_per_unit,
       ri.quantity, ri.unit, ri.cost_per_unit, ri.extension, ri.sort_order
     FROM recipe_ingredients ri
     JOIN ingredients i ON i.id = ri.ingredient_id
@@ -400,7 +400,7 @@ export async function getHppIngredients(opts?: {
       i.id, i.item_id, 
       COALESCE(it.name, i.name) AS name,
       COALESCE(it.smallest_unit, i.default_unit) AS default_unit,
-      COALESCE(it.current_average_price, i.standard_cost_per_unit) AS standard_cost_per_unit,
+      COALESCE(NULLIF(it.current_average_price, 0), i.standard_cost_per_unit) AS standard_cost_per_unit,
       i.description,
       COALESCE(COUNT(ri.id)::int, 0) AS used_in_recipes,
       (it.id IS NOT NULL) AS is_linked
@@ -753,6 +753,13 @@ export async function createIngredient(data: {
   standard_cost_per_unit: number;
   description?: string;
 }) {
+  if (data.item_id) {
+    const check = await query(`SELECT id FROM ingredients WHERE item_id = $1`, [data.item_id]);
+    if (check.rowCount && check.rowCount > 0) {
+      throw new Error(`Master barang ini sudah didaftarkan sebagai Bahan Baku.`);
+    }
+  }
+
   const res = await query(`
     INSERT INTO ingredients (item_id, name, default_unit, standard_cost_per_unit, description)
     VALUES ($1, $2, $3, $4, $5)
@@ -768,6 +775,13 @@ export async function updateIngredient(id: number, data: {
   standard_cost_per_unit: number;
   description?: string;
 }) {
+  if (data.item_id) {
+    const check = await query(`SELECT id FROM ingredients WHERE item_id = $1 AND id != $2`, [data.item_id, id]);
+    if (check.rowCount && check.rowCount > 0) {
+      throw new Error(`Master barang ini sudah didaftarkan sebagai Bahan Baku.`);
+    }
+  }
+
   const res = await query(`
     UPDATE ingredients 
     SET item_id = $1, name = $2, default_unit = $3, standard_cost_per_unit = $4, description = $5

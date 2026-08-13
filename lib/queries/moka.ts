@@ -95,7 +95,31 @@ export async function saveMokaToken(
     }
 }
 
-// BARU: Menonaktifkan satu akun Moka tanpa menghapus data
+// Cek apakah client_id sudah pernah terdaftar (aktif maupun non-aktif)
+// Jika ADA & AKTIF → tidak perlu apa-apa (sudah terhubung)
+// Jika ADA & TIDAK AKTIF → kembalikan found:false agar sistem paksa OAuth ulang (token lama expired)
+export async function reactivateMokaAccountByClientId(clientId: string, clientSecret: string) {
+    try {
+        const res = await query(
+            `SELECT id, business_id, account_name, is_active FROM moka_tokens WHERE client_id = $1 AND client_secret = $2 LIMIT 1`,
+            [clientId, clientSecret]
+        );
+        if (res.rowCount === 0) return { found: false };
+        const row = res.rows[0];
+        // Jika sudah aktif → berarti memang sudah terhubung & token masih valid
+        if (row.is_active) {
+            return { found: true, reactivated: false, business_id: row.business_id, account_name: row.account_name };
+        }
+        // Jika tidak aktif → token expired/dicabut Moka. Harus OAuth ulang untuk dapat token segar.
+        // Kembalikan found:false agar pemanggil memulai flow OAuth normal.
+        return { found: false };
+    } catch (error) {
+        console.error('Error checking Moka account by client_id:', error);
+        return { found: false };
+    }
+}
+
+// Menonaktifkan satu akun Moka tanpa menghapus data
 export async function deactivateMokaAccount(businessId: number) {
     try {
         await query('UPDATE moka_tokens SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE business_id = $1', [businessId]);
@@ -105,4 +129,3 @@ export async function deactivateMokaAccount(businessId: number) {
         return false;
     }
 }
-

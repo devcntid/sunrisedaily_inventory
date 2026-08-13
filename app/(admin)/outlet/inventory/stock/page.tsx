@@ -61,7 +61,8 @@ export default function OutletInventoryStockPage() {
     if (saving) return;
     setSaving(true);
     try {
-      const val = parseFloat(editValue) || 0;
+      const parsedStr = editValue.replace(/\./g, '').replace(',', '.');
+      const val = parseFloat(parsedStr) || 0;
       const res = await fetch('/api/outlet/inventory/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,7 +91,7 @@ export default function OutletInventoryStockPage() {
     const matchCategory = !categoryFilter || d.category_name === categoryFilter;
     const matchStatus = !statusFilter || status === statusFilter;
     const matchSearch = !search.trim() || (() => {
-      const code = `ERC${String(d.item_id).padStart(5, '0')}`;
+      const code = `ERC${String(d.item_id).padStart(6, '0')}`;
       return d.item_name.toLowerCase().includes(search.toLowerCase()) ||
         code.toLowerCase().includes(search.toLowerCase()) ||
         (d.barcode && d.barcode.toLowerCase().includes(search.toLowerCase()));
@@ -119,7 +120,7 @@ export default function OutletInventoryStockPage() {
                   type="text"
                   className="input"
                   style={{ paddingLeft: 30, height: 32, fontSize: 13, width: '100%' }}
-                  placeholder="Search items/barcode..."
+                  placeholder="Cari barang/barcode..."
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(1); }}
                 />
@@ -128,7 +129,7 @@ export default function OutletInventoryStockPage() {
                 value={categoryFilter}
                 onChange={val => { setCategoryFilter(String(val)); setPage(1); }}
                 options={[
-                  { value: '', label: 'All Categories' },
+                  { value: '', label: 'Semua Kategori' },
                   ...categories.map(c => ({ value: c, label: c }))
                 ]}
                 style={{ width: 160 }}
@@ -138,10 +139,10 @@ export default function OutletInventoryStockPage() {
                 value={statusFilter}
                 onChange={val => { setStatusFilter(String(val)); setPage(1); }}
                 options={[
-                  { value: '', label: 'All Statuses' },
-                  { value: 'AVAILABLE', label: 'Available' },
-                  { value: 'LOW_STOCK', label: 'Low Stock' },
-                  { value: 'OUT_OF_STOCK', label: 'Out of Stock' }
+                  { value: '', label: 'Semua Status' },
+                  { value: 'AVAILABLE', label: 'Tersedia' },
+                  { value: 'LOW_STOCK', label: 'Stok Menipis' },
+                  { value: 'OUT_OF_STOCK', label: 'Stok Habis' }
                 ]}
                 style={{ width: 140 }}
                 inputStyle={{ height: 32, fontSize: 13 }}
@@ -179,7 +180,7 @@ export default function OutletInventoryStockPage() {
                   <button className="btn btn-outline" style={{ padding: '2px 6px', display: 'flex', alignItems: 'center', height: 26, minWidth: 26, justifyContent: 'center' }} onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}><ChevronRight size={13} /></button>
                 </div>
               )}
-              <span className="muted" style={{ fontSize: 12 }}>{filteredData.length} items</span>
+              <span className="muted" style={{ fontSize: 12 }}>{filteredData.length} barang</span>
             </div>
           </div>
         </div>
@@ -213,14 +214,13 @@ export default function OutletInventoryStockPage() {
                       onClick={() => {
                         if (editingId !== row.item_id) {
                           setEditingId(row.item_id);
-                          setEditValue(row.minimum_threshold?.toString() || '0');
+                          setEditValue(row.minimum_threshold != null ? row.minimum_threshold.toLocaleString('id-ID') : '0');
                         }
                       }}
                       title="Klik baris untuk mengubah stok minimum"
                     >
                       <td style={{ fontFamily: 'monospace', color: 'var(--muted)', fontSize: 13 }}>
-                        ERC{String(row.item_id).padStart(5, '0')}
-                        {row.barcode && <div style={{ fontSize: 11, marginTop: 2 }}>{row.barcode}</div>}
+                        {row.barcode || `ERC${String(row.item_id).padStart(6, '0')}`}
                       </td>
                       <td>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{row.item_name}</div>
@@ -236,7 +236,7 @@ export default function OutletInventoryStockPage() {
                       <td className="right">
                         <span style={{ fontSize: 13, color: 'var(--ink)' }}>
                           {row.minimum_threshold !== null ? (
-                            <>{row.minimum_threshold} <span style={{ fontSize: 12, color: 'var(--muted)' }}>{formatUnit(row.smallest_unit)}</span></>
+                            <>{row.minimum_threshold.toLocaleString('id-ID')} <span style={{ fontSize: 12, color: 'var(--muted)' }}>{formatUnit(row.smallest_unit)}</span></>
                           ) : (
                             <span style={{ color: 'var(--muted)' }}>-</span>
                           )}
@@ -293,7 +293,16 @@ export default function OutletInventoryStockPage() {
               autoFocus
               style={{ flex: 1 }}
               value={editValue}
-              onChange={e => setEditValue(e.target.value.replace(/[^0-9.]/g, ''))}
+              onChange={e => {
+                const clean = e.target.value.replace(/[^0-9,]/g, '');
+                const parts = clean.split(',');
+                let intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                if (parts.length > 1) {
+                  setEditValue(`${intPart},${parts.slice(1).join('')}`);
+                } else {
+                  setEditValue(intPart);
+                }
+              }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && editingId !== null) handleSaveMin(editingId);
               }}
