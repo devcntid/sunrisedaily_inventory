@@ -85,11 +85,12 @@ export default function InventoryValueTablePage() {
   return (
     <section style={{ margin: '-16px -20px', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 52px)' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-        <div className="tabs" style={{ marginBottom: 0, padding: '0 24px', paddingTop: 16 }}>
+        <div className="tabs" style={{ marginBottom: 0, padding: '0 24px', paddingTop: 16, overflowX: 'auto', whiteSpace: 'nowrap', display: 'flex', gap: 4 }}>
           <Link href="/reports" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Grafik Keuangan</Link>
-          <Link href="/reports/sales-analytics" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Analitik Penjualan</Link>
           <Link href="/reports/inventory-value" className="tab active" style={{ textDecoration: 'none' }}>Tabel Persediaan</Link>
           <Link href="/price-history" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Riwayat Harga</Link>
+          <Link href="/sales-report" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Ringkasan Moka</Link>
+          <Link href="/sales-report/customers" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Pelanggan Moka</Link>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 12 }}>
           <div>

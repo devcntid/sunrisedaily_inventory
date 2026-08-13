@@ -7,16 +7,17 @@ interface ToggleProps {
   label?: string;
   className?: string;
   size?: 'sm' | 'md';
+  title?: string;
 }
 
-export function Toggle({ checked, onChange, label, className = '', size = 'md' }: ToggleProps) {
+export function Toggle({ checked, onChange, label, className = '', size = 'md', title }: ToggleProps) {
   const isSm = size === 'sm';
   const width = isSm ? 42 : 54;
   const height = isSm ? 24 : 30;
   const thumbSize = isSm ? 16 : 22;
 
   return (
-    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} className={className}>
+    <label title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} className={className}>
       <div
         tabIndex={0}
         onClick={() => onChange(!checked)}

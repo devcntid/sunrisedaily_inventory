@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Toast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { BarcodeScannerModal } from '@/components/ui/BarcodeScannerModal';
 import { Select } from '@/components/ui/Select';
 import { ItemSelectWithBrand } from '@/components/shared/ItemSelectWithBrand';
@@ -57,6 +58,9 @@ export default function CreateDeliveryOrderPage() {
 
   const [allItems, setAllItems] = useState<any[]>([]);
   const [bulkQty, setBulkQty] = useState('1');
+
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
+  const [duplicateWarningData, setDuplicateWarningData] = useState<{ existingNote?: any }>({});
 
   useEffect(() => {
     // Fetch orders that are PROCESSING or READY
@@ -238,17 +242,8 @@ export default function CreateDeliveryOrderPage() {
     const parentItem = allItems.find(i => String(i.id) === parentId);
     if (!parentItem) return;
 
-    if (parentItem.has_children) {
-      setOrderItems(orderItems.map(i => String(i.order_item_id) === String(orderItemId) ? {
-        ...i,
-        parent_id: parentItem.id,
-        item_id: 0,
-        item_name: parentItem.name,
-      } : i));
-    } else {
-      // It's a standalone item
-      handleSelectAdditionalItem(orderItemId, parentId, parentItem.id);
-    }
+    // We no longer require picking a brand (child), just select the parent directly
+    handleSelectAdditionalItem(orderItemId, parentId, parentItem.id);
   };
 
   const handleSelectAdditionalItem = (orderItemId: number, newItemId: string, parentId?: number | string) => {
@@ -356,6 +351,31 @@ export default function CreateDeliveryOrderPage() {
     setError('');
 
     try {
+      // Periksa duplikasi DO hari ini
+      const checkRes = await fetch(`/api/delivery-notes/check-today?outlet_id=${targetOutletId}&date=${form.delivery_date}`);
+      const checkData = await checkRes.json();
+      
+      if (!checkRes.ok) {
+        throw new Error(checkData.message || 'Gagal memeriksa duplikasi Surat Jalan');
+      }
+
+      if (checkData.hasDuplicate) {
+        setSaving(false);
+        setDuplicateWarningData({ existingNote: checkData.existingNote });
+        setShowDuplicateConfirm(true);
+        return;
+      }
+      
+      await executeSave(selectedItems);
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : 'Unknown error'));
+      setSaving(false);
+    }
+  };
+
+  const executeSave = async (selectedItems: any[]) => {
+    setSaving(true);
+    try {
       const payload = {
         order_id: selectedOrderId === 'DIRECT' ? null : Number(selectedOrderId),
         outlet_id: Number(targetOutletId),
@@ -410,6 +430,20 @@ export default function CreateDeliveryOrderPage() {
             </Button>
           </div>
         </div>
+
+        <ConfirmDialog
+          open={showDuplicateConfirm}
+          title="Pengiriman Ganda Terdeteksi"
+          message={`Sudah ada Surat Jalan untuk outlet ini pada tanggal ${form.delivery_date} (${duplicateWarningData?.existingNote?.delivery_note_number} - Status: ${duplicateWarningData?.existingNote?.status}). Apakah Anda yakin ingin membuat Surat Jalan baru?`}
+          onConfirm={() => {
+            setShowDuplicateConfirm(false);
+            const selectedItems = orderItems.filter(i => i.selected && parseLocalNumber(i.qty_shipped) > 0 && i.item_id !== 0);
+            executeSave(selectedItems);
+          }}
+          onCancel={() => setShowDuplicateConfirm(false)}
+          confirmText="Ya, Buat Baru"
+          cancelText="Batal"
+        />
 
         <div className="card-body flush" style={{ padding: 24 }}>
           <Toast
@@ -591,30 +625,16 @@ export default function CreateDeliveryOrderPage() {
                           {item.is_additional ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
                               <Select
-                                value={String(item.parent_id || item.item_id || '')}
+                                value={String(item.item_id || '')}
                                 onChange={(val) => handleSelectParent(item.order_item_id, String(val))}
                                 options={[
-                                  { value: '', label: 'Pilih Bahan Utama...' },
-                                  ...allItems.filter(i => !i.parent_id).map(i => ({ value: String(i.id), label: i.name }))
+                                  { value: '', label: 'Pilih Barang...' },
+                                  ...allItems
+                                    .filter(i => i.parent_id || !allItems.some(child => child.parent_id === i.id))
+                                    .map(i => ({ value: String(i.id), label: i.parent_id ? `${allItems.find(p => p.id === i.parent_id)?.name || ''} - ${i.name}` : i.name }))
                                 ]}
                                 searchable
                               />
-                              {item.parent_id && allItems.find(i => String(i.id) === String(item.parent_id))?.has_children && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 8 }}>
-                                  <span style={{ color: '#94a3b8', fontSize: 16 }}>↳</span>
-                                  <div style={{ flex: 1, border: item.item_id === 0 ? '1px solid #ef4444' : 'none', borderRadius: 6 }}>
-                                    <Select
-                                      value={item.item_id === 0 ? '' : String(item.item_id)}
-                                      onChange={(val) => handleSelectAdditionalItem(item.order_item_id, String(val), item.parent_id)}
-                                      options={[
-                                        { value: '', label: 'Pilih Brand (Wajib)...' },
-                                        ...allItems.filter(i => String(i.parent_id) === String(item.parent_id)).map(i => ({ value: String(i.id), label: i.name }))
-                                      ]}
-                                      searchable
-                                    />
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           ) : (
                             <>

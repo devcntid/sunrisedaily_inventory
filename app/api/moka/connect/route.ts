@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { saveMokaOauthState } from '@/lib/queries/moka';
+import { saveMokaOauthState, reactivateMokaAccountByClientId } from '@/lib/queries/moka';
 
 // POST: Receive client_id & client_secret from UI form, store in DB with state token, return Moka auth URL
 export async function POST(request: NextRequest) {
@@ -11,6 +11,19 @@ export async function POST(request: NextRequest) {
 
     if (!client_id || !client_secret) {
         return NextResponse.json({ error: 'client_id and client_secret are required' }, { status: 400 });
+    }
+
+    // ── Shortcut: Jika client_id+secret sudah ada di DB, aktifkan langsung tanpa OAuth ulang ──
+    const existing = await reactivateMokaAccountByClientId(client_id.trim(), client_secret.trim());
+    if (existing.found) {
+        return NextResponse.json({
+            reactivated: true,
+            account_name: existing.account_name,
+            business_id: existing.business_id,
+            message: existing.reactivated
+                ? `Akun "${existing.account_name}" berhasil diaktifkan kembali.`
+                : `Akun "${existing.account_name}" sudah aktif.`
+        });
     }
 
     const redirectUri = process.env.MOKA_REDIRECT_URI;

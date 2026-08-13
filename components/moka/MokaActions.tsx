@@ -11,22 +11,22 @@ export function ConnectMokaButton() {
     const [showModal, setShowModal] = useState(false);
     const [clientId, setClientId] = useState('');
     const [clientSecret, setClientSecret] = useState('');
-    const [error, setError] = useState('');
+    const [toast, setToast] = useState<{ show: boolean; msg: string; type: 'error' | 'success' | 'info' }>({ show: false, msg: '', type: 'error' });
 
     const handleOpenModal = () => {
         setClientId('');
         setClientSecret('');
-        setError('');
+        setToast({ show: false, msg: '', type: 'error' });
         setShowModal(true);
     };
 
     const handleConnect = async () => {
         if (!clientId.trim() || !clientSecret.trim()) {
-            setError('Client ID and Client Secret are required.');
+            setToast({ show: true, msg: 'Client ID dan Client Secret wajib diisi.', type: 'error' });
             return;
         }
         setIsLoading(true);
-        setError('');
+        setToast({ show: false, msg: '', type: 'error' });
         try {
             const res = await fetch('/api/moka/connect', {
                 method: 'POST',
@@ -34,19 +34,32 @@ export function ConnectMokaButton() {
                 body: JSON.stringify({ client_id: clientId.trim(), client_secret: clientSecret.trim() }),
             });
             const data = await res.json();
-            if (!res.ok || !data.auth_url) {
-                setError(data.error || 'Failed to initiate connection.');
+            if (!res.ok) {
+                setToast({ show: true, msg: data.error || 'Gagal memulai koneksi. Periksa kembali kredensial Anda.', type: 'error' });
+                setIsLoading(false);
+                return;
+            }
+            // Jika akun sudah ada di DB → diaktifkan langsung, tidak perlu OAuth ulang
+            if (data.reactivated) {
+                setShowModal(false);
+                window.location.href = `/settings/moka?success=${encodeURIComponent(data.message)}`;
+                return;
+            }
+            // Akun baru → arahkan ke halaman otorisasi Moka
+            if (!data.auth_url) {
+                setToast({ show: true, msg: data.error || 'Gagal mendapatkan URL otorisasi Moka.', type: 'error' });
                 setIsLoading(false);
                 return;
             }
             setShowModal(false);
             window.location.href = data.auth_url;
         } catch {
-            setError('Network error. Please try again.');
+            setToast({ show: true, msg: 'Terjadi kesalahan jaringan. Silakan coba lagi.', type: 'error' });
         } finally {
             setIsLoading(false);
         }
     };
+
 
     return (
         <>
@@ -61,10 +74,7 @@ export function ConnectMokaButton() {
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-                        <h3 className="text-sm font-bold text-gray-900 mb-1">Hubungkan Aplikasi Moka</h3>
-                        <p className="text-xs text-gray-500 mb-5">
-                            Masukkan Client ID dan Client Secret dari Portal Developer Moka. Setiap akun memiliki kredensial unik.
-                        </p>
+                        <h3 className="text-sm font-bold text-gray-900 mb-10">Hubungkan dengan Moka</h3>
 
                         <div className="space-y-3">
                             <div>
@@ -87,7 +97,6 @@ export function ConnectMokaButton() {
                                     className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#016e3f]/30 focus:border-[#016e3f]"
                                 />
                             </div>
-                            {error && <p className="text-xs text-red-500">{error}</p>}
                         </div>
 
                         <div className="flex items-center justify-end gap-2 mt-5">
@@ -103,12 +112,18 @@ export function ConnectMokaButton() {
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#016e3f] text-white rounded-md hover:bg-[#015933] transition-colors disabled:opacity-50"
                             >
                                 {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Link className="w-3.5 h-3.5" />}
-                                Otorisasi & Hubungkan
+                                Hubungkan
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+            <Toast
+                isOpen={toast.show}
+                message={toast.msg}
+                type={toast.type}
+                onClose={() => setToast(t => ({ ...t, show: false }))}
+            />
         </>
     );
 }

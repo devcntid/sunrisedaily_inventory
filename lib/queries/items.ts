@@ -35,7 +35,7 @@ export interface Item {
   venue_ids?: number[];
 }
 
-export async function getItems(opts?: { categoryId?: string; search?: string; activeOnly?: boolean; parentOnly?: boolean; venueId?: number }) {
+export async function getItems(opts?: { categoryId?: string; search?: string; activeOnly?: boolean; parentOnly?: boolean; venueId?: number; parentId?: number }) {
   const conditions: string[] = [];
   const params: unknown[] = [];
   let i = 1;
@@ -58,6 +58,10 @@ export async function getItems(opts?: { categoryId?: string; search?: string; ac
   if (opts?.venueId) {
     conditions.push(`(i.is_global = TRUE OR EXISTS(SELECT 1 FROM item_venues iv WHERE iv.item_id = i.id AND iv.venue_id = $${i++}))`);
     params.push(opts.venueId);
+  }
+  if (opts?.parentId) {
+    conditions.push(`i.parent_id = $${i++}`);
+    params.push(Number(opts.parentId));
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -306,30 +310,72 @@ export async function updateItem(id: number, data: Partial<{
       );
     }
 
-    // 4. Update or Insert Brands
-    if (data.brands && data.brands.length > 0 && updatedItem) {
-      for (const brand of data.brands) {
-        if (brand.id) {
-          await client.query(
-            `UPDATE items SET name=$1, barcode=$2, current_average_price=$3, last_purchase_price=$3, conversion_ratio=$4, purchase_unit=$5, is_active=$6, updated_at=now() WHERE id=$7`,
-            [brand.name, brand.barcode || null, brand.purchase_price, brand.conversion_ratio, brand.purchase_unit || updatedItem.purchase_unit, brand.is_active ?? true, Number(brand.id)]
-          );
-        } else {
-          await client.query(
-            `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-            [
-              brand.name, updatedItem.category_id, brand.purchase_unit || updatedItem.purchase_unit, updatedItem.smallest_unit, brand.conversion_ratio,
-              updatedItem.minimum_threshold, updatedItem.target_stock, updatedItem.threshold_type, updatedItem.is_perishable,
-              brand.barcode || null, brand.purchase_price, brand.purchase_price,
-              updatedItem.ingredient_id,
-              updatedItem.is_split_allowed,
-              updatedItem.min_order_qty,
-              updatedItem.order_multiple,
-              id,
-              brand.is_active ?? true
-            ]
-          );
+    // 4. Update, Insert, or Delete Brands
+    if (data.brands !== undefined && updatedItem) {
+      // Dapatkan semua brand yang sudah ada
+      const existingBrandsRes = await client.query(`SELECT id FROM items WHERE parent_id = $1`, [id]);
+      const existingBrandIds = existingBrandsRes.rows.map(r => r.id);
+      
+      const incomingBrandIds = data.brands.map(b => b.id ? Number(b.id) : null).filter(Boolean) as number[];
+      
+      // Hapus brand yang tidak ada di payload (dihapus dari form)
+      for (const existingId of existingBrandIds) {
+        if (!incomingBrandIds.includes(existingId)) {
+          try {
+            await client.query(`SAVEPOINT delete_brand_${existingId}`);
+            await client.query(`DELETE FROM price_history WHERE item_id = $1`, [existingId]);
+            await client.query(`DELETE FROM item_venues WHERE item_id = $1`, [existingId]);
+            await client.query(`DELETE FROM items WHERE id = $1`, [existingId]);
+            await client.query(`RELEASE SAVEPOINT delete_brand_${existingId}`);
+          } catch (e: any) {
+            await client.query(`ROLLBACK TO SAVEPOINT delete_brand_${existingId}`);
+            if (e.code === '23503') {
+              // Otomatis nonaktifkan (soft-delete) jika tidak bisa dihapus karena sudah ada transaksi
+              await client.query(`UPDATE items SET is_active = false, updated_at = now() WHERE id = $1`, [existingId]);
+            } else {
+              throw e;
+            }
+          }
+        }
+      }
+
+      if (data.brands.length > 0) {
+        for (const brand of data.brands) {
+          if (brand.id) {
+            await client.query(
+              `UPDATE items SET name=$1, barcode=$2, current_average_price=$3, last_purchase_price=$3, conversion_ratio=$4, purchase_unit=$5, is_active=$6, updated_at=now() WHERE id=$7`,
+              [brand.name, brand.barcode || null, brand.purchase_price, brand.conversion_ratio, brand.purchase_unit || updatedItem.purchase_unit, brand.is_active ?? true, Number(brand.id)]
+            );
+          } else {
+            const newBrandRes = await client.query(
+              `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+              [
+                brand.name, updatedItem.category_id, brand.purchase_unit || updatedItem.purchase_unit, updatedItem.smallest_unit, brand.conversion_ratio,
+                updatedItem.minimum_threshold, updatedItem.target_stock, updatedItem.threshold_type, updatedItem.is_perishable,
+                brand.barcode || null, brand.purchase_price, brand.purchase_price,
+                updatedItem.ingredient_id,
+                updatedItem.is_split_allowed,
+                updatedItem.min_order_qty,
+                updatedItem.order_multiple,
+                id,
+                brand.is_active ?? true,
+                updatedItem.is_global
+              ]
+            );
+            const childId = newBrandRes.rows[0].id;
+            
+            // Re-apply venues for the new brand if the parent has specific venues
+            if (!updatedItem.is_global && data.venue_ids && data.venue_ids.length > 0) {
+              const uniqueVenueIds = [...new Set(data.venue_ids.map((v: number | string) => Number(v)))].filter(v => v > 0);
+              for (const vid of uniqueVenueIds) {
+                await client.query(
+                  `INSERT INTO item_venues (item_id, venue_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                  [childId, vid]
+                );
+              }
+            }
+          }
         }
       }
     }

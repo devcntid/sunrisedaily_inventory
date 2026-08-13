@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getTemplateMasterData, getTemplateRecipeData } from '@/lib/queries/hpp_template';
 import * as xlsx from 'xlsx';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const masterData = await getTemplateMasterData();
@@ -11,6 +13,7 @@ export async function GET() {
     const isianData = recipeData.map(r => ({
       menu_id: Number(r.menu_id),
       nama_menu: r.nama_menu,
+      nama_varian: r.nama_varian || '',
       bahan_id: Number(r.bahan_id),
       nama_bahan: r.nama_bahan,
       takaran: Number(r.takaran),
@@ -21,7 +24,8 @@ export async function GET() {
     if (isianData.length === 0) {
       isianData.push({
         menu_id: 0,
-        nama_menu: 'Contoh: Americano (Ganti/Hapus baris ini)',
+        nama_menu: 'Contoh: Butterscotch Coffee (Ganti/Hapus baris ini)',
+        nama_varian: 'Hot Medium',
         bahan_id: 0,
         nama_bahan: 'Contoh: Kopi',
         takaran: 10,
@@ -32,7 +36,8 @@ export async function GET() {
     const wsIsian = xlsx.utils.json_to_sheet(isianData);
     wsIsian['!cols'] = [
       { wch: 10 }, // menu_id
-      { wch: 35 }, // nama_menu
+      { wch: 30 }, // nama_menu
+      { wch: 20 }, // nama_varian
       { wch: 10 }, // bahan_id
       { wch: 35 }, // nama_bahan
       { wch: 15 }, // takaran
@@ -43,10 +48,12 @@ export async function GET() {
     const wsRefMenu = xlsx.utils.json_to_sheet(
       masterData.menus.map(m => ({
         menu_id: Number(m.menu_id),
-        nama_menu: m.nama_menu
+        nama_menu: m.nama_menu,
+        nama_varian: m.nama_varian || '',
+        display_name: m.display_name
       }))
     );
-    wsRefMenu['!cols'] = [{ wch: 10 }, { wch: 35 }];
+    wsRefMenu['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 25 }, { wch: 40 }];
 
     // 3. Siapkan Sheet Referensi Bahan
     const wsRefBahan = xlsx.utils.json_to_sheet(

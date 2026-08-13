@@ -5,9 +5,9 @@ import type { PoolClient } from 'pg';
 
 export async function getTemplateMasterData() {
   const menusRes = await query(`
-    SELECT id AS menu_id, name AS nama_menu
+    SELECT id AS menu_id, name AS nama_menu, variant AS nama_varian, COALESCE(display_name, name) AS display_name
     FROM menus
-    ORDER BY name
+    ORDER BY name, variant
   `);
 
   const ingredientsRes = await query(`
@@ -43,6 +43,8 @@ export async function getTemplateRecipeData() {
     SELECT DISTINCT ON (m.id, i.id)
       m.id AS menu_id,
       m.name AS nama_menu,
+      m.variant AS nama_varian,
+      COALESCE(m.display_name, m.name) AS display_name,
       i.id AS bahan_id,
       COALESCE(it.name, i.name) AS nama_bahan,
       ri.quantity AS takaran,
@@ -62,7 +64,10 @@ export async function getTemplateRecipeData() {
 
 export type ValidatedRecipeRow = {
   menu_id: number;
+  nama_menu?: string;
+  nama_varian?: string;
   bahan_id: number;
+  nama_bahan?: string;
   takaran: number;
   satuan: string;
 };

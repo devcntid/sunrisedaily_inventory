@@ -56,11 +56,12 @@ export default function PriceHistoryPage() {
   return (
     <section className="screen">
       <div className="card">
-        <div className="tabs" style={{ marginBottom: 0 }}>
+        <div className="tabs" style={{ marginBottom: 0, overflowX: 'auto', whiteSpace: 'nowrap', display: 'flex', gap: 4 }}>
           <Link href="/reports" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Grafik Keuangan</Link>
-          <Link href="/reports/sales-analytics" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Analitik Penjualan</Link>
           <Link href="/reports/inventory-value" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Tabel Persediaan</Link>
           <Link href="/price-history" className="tab active" style={{ textDecoration: 'none' }}>Riwayat Harga</Link>
+          <Link href="/sales-report" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Ringkasan Moka</Link>
+          <Link href="/sales-report/customers" className="tab" style={{ textDecoration: 'none', color: 'inherit' }}>Pelanggan Moka</Link>
         </div>
         <div className="card-head">
           <div>

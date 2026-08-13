@@ -17,7 +17,8 @@ export function Toast({ message, type = 'info', isOpen, onClose, duration = 4000
       }, duration);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, onClose, duration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, duration]);
 
   if (!isOpen) return null;
 

@@ -377,6 +377,7 @@ export default function CreateRequestPage() {
                         items={items as any}
                         placeholder="Pilih Barang..."
                         style={{ width: '100%', maxWidth: 300 }}
+                        parentOnly={true}
                       />
                     ) : c.name}
                   </td>
