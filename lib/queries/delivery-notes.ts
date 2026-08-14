@@ -72,11 +72,11 @@ export async function createDeliveryNote(data: {
       const itemIds = data.items.map(i => i.item_id);
 
       const balRes = await client.query(
-        `SELECT DISTINCT ON (i.id) i.id as item_id, log.ending_balance, i.name as item_name, i.smallest_unit, i.purchase_unit, i.conversion_ratio 
+        `SELECT i.id as item_id, 
+                (SELECT ending_balance FROM inventory_logs log WHERE log.item_id = COALESCE(i.parent_id, i.id) ORDER BY log.created_at DESC, log.id DESC LIMIT 1) as ending_balance, 
+                i.name as item_name, i.smallest_unit, i.purchase_unit, i.conversion_ratio 
          FROM items i
-         LEFT JOIN inventory_logs log ON log.item_id = i.id 
-         WHERE i.id = ANY($1::int[]) 
-         ORDER BY i.id, log.created_at DESC, log.id DESC`,
+         WHERE i.id = ANY($1::int[])`,
         [itemIds]
       );
       const balMap = new Map();
@@ -966,9 +966,12 @@ export async function resolveDeliveryNoteIssue(issueId: number, action: 'REPLACE
       // → Kita harus mencatat kerugian qty_issue ke inventory_logs dengan movement_type 'WRITE_OFF'.
       const qtyToWriteOff = parseFloat(issue.qty_issue ?? '0');
       if (qtyToWriteOff > 0) {
+        const parentRes = await client.query(`SELECT COALESCE(parent_id, id) as real_id FROM items WHERE id = $1`, [issue.item_id]);
+        const realItemId = parentRes.rows[0].real_id;
+
         const balRes = await client.query(
           `SELECT ending_balance FROM inventory_logs WHERE item_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
-          [issue.item_id]
+          [realItemId]
         );
         const oldBalance = parseFloat(balRes.rows[0]?.ending_balance ?? '0');
         const newBalance = oldBalance - qtyToWriteOff;
@@ -976,7 +979,7 @@ export async function resolveDeliveryNoteIssue(issueId: number, action: 'REPLACE
         await client.query(
           `INSERT INTO inventory_logs (item_id, movement_type, qty_change, ending_balance, reference_type, reference_id)
            VALUES ($1, 'WRITE_OFF', $2, $3, 'ISSUE_WRITE_OFF', $4)`,
-          [issue.item_id, -qtyToWriteOff, newBalance, issueId]
+          [realItemId, -qtyToWriteOff, newBalance, issueId]
         );
       }
     } else if (action === 'REPLACE') {
@@ -1049,22 +1052,24 @@ export async function approveAndTransferDeliveryNote(deliveryNoteId: number, adm
 
     // 2. Ambil semua item dalam Delivery Note
     const itemsRes = await client.query(
-      `SELECT id, item_id, qty_shipped, qty_received, order_item_id, price_at_shipment 
-       FROM delivery_note_items 
-       WHERE delivery_note_id = $1`,
+      `SELECT dni.id, dni.item_id, dni.qty_shipped, dni.qty_received, dni.order_item_id, dni.price_at_shipment, i.parent_id
+       FROM delivery_note_items dni
+       JOIN items i ON i.id = dni.item_id
+       WHERE dni.delivery_note_id = $1`,
       [deliveryNoteId]
     );
     if (itemsRes.rows.length === 0) {
       throw new Error('Surat Jalan tidak memiliki item untuk ditransfer.');
     }
 
-    const itemIds = itemsRes.rows.map((r: { item_id: number }) => r.item_id);
+    const parentOrItemIds = itemsRes.rows.map(r => Number(r.parent_id || r.item_id));
+    const itemIds = itemsRes.rows.map(r => Number(r.item_id));
 
     // STEP 1 (BULK): Baca saldo pusat sekaligus
     const balRes = await client.query(
       `SELECT DISTINCT ON (item_id) item_id, ending_balance 
        FROM inventory_logs WHERE item_id = ANY($1::int[]) ORDER BY item_id, created_at DESC, id DESC`,
-      [itemIds]
+      [parentOrItemIds]
     );
     const balMap = new Map<number, number>();
     for (const row of balRes.rows) balMap.set(Number(row.item_id), parseFloat(row.ending_balance));
@@ -1082,11 +1087,12 @@ export async function approveAndTransferDeliveryNote(deliveryNoteId: number, adm
       const qty = parseFloat(dni.qty_received ?? dni.qty_shipped ?? '0');
       if (qty <= 0) continue;
 
-      const oldBal = balMap.get(Number(dni.item_id)) ?? 0;
+      const targetItemId = Number(dni.parent_id || dni.item_id);
+      const oldBal = balMap.get(targetItemId) ?? 0;
       const newBal = oldBal - qty;
-      balMap.set(Number(dni.item_id), newBal);
+      balMap.set(targetItemId, newBal);
 
-      central_itemIds.push(Number(dni.item_id));
+      central_itemIds.push(targetItemId);
       central_qtyChanges.push(-qty);
       central_newBalances.push(newBal);
 

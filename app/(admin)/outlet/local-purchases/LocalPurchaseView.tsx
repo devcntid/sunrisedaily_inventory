@@ -78,7 +78,6 @@ export function LocalPurchaseView({ role, outletId }: { role: 'ADMIN_PUSAT' | 'A
         setPurchases(data.data);
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -291,7 +290,7 @@ export function LocalPurchaseView({ role, outletId }: { role: 'ADMIN_PUSAT' | 'A
                 </thead>
                 <tbody>
                   {items.map((item, index) => (
-                    <tr key={index}>
+                    <tr key={item.item_id ? `local-item-${item.item_id}-${index}` : `local-item-${index}`}>
                       <td style={{ padding: '8px 12px' }}>
                         <Select
                           searchable

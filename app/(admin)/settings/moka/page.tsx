@@ -127,7 +127,7 @@ export default async function MokaIntegrationPage(props: {
                                             { label: 'Data Transaksi Kasir', date: syncStatus.transactions },
                                             { label: 'Data Pelanggan', date: syncStatus.customers },
                                         ].map((item, idx) => (
-                                            <div key={idx} className="flex justify-between items-center py-2.5 first:pt-0 last:pb-0">
+                                            <div key={item.label} className="flex justify-between items-center py-2.5 first:pt-0 last:pb-0">
                                                 <span className="text-[11.5px] font-medium text-gray-700">{item.label}</span>
                                                 {item.date ? (
                                                     <span className="text-[10px] font-bold text-[#016e3f] bg-[#016e3f]/10 px-2 py-0.5 rounded border border-[#016e3f]/10">

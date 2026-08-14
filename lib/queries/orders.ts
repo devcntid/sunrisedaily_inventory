@@ -102,7 +102,7 @@ export async function getOrderById(id: number) {
 
   const itemsResult = await query<OrderItem>(
     `SELECT oi.*, i.name AS item_name, c.name AS category_name,
-            i.purchase_unit, i.smallest_unit, i.conversion_ratio,
+            COALESCE(oi.requested_unit, i.purchase_unit) AS purchase_unit, i.smallest_unit, COALESCE(oi.requested_conversion_ratio, i.conversion_ratio) AS conversion_ratio,
             COALESCE((SELECT ending_balance FROM inventory_logs WHERE item_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1), 0) AS current_stock
      FROM order_items oi
      LEFT JOIN items i ON i.id = oi.item_id
@@ -119,7 +119,7 @@ export async function createOrder(data: {
   order_date: string;
   delivery_date: string;
   created_by: number;
-  items: Array<{ item_id: number; qty_request: number; additional_notes?: string }>;
+  items: Array<{ item_id: number; qty_request: number; additional_notes?: string; requested_unit?: string; requested_conversion_ratio?: number }>;
 }) {
   return withTransaction(async (client) => {
     const orderResult = await client.query(
@@ -157,10 +157,13 @@ export async function createOrder(data: {
       const itemStatuses: string[] = [];
       const qtyApproveds: number[] = [];
       const approvedSmallestQtys: number[] = [];
+      const requestedUnits: (string | null)[] = [];
+      const requestedRatios: (number | null)[] = [];
 
       for (const item of data.items) {
         const { ratio, stock } = itemDataMap.get(Number(item.item_id)) || { ratio: 1, stock: 0 };
-        const smallest_unit_qty = item.qty_request * ratio;
+        const conversion_ratio = item.requested_conversion_ratio ?? ratio;
+        const smallest_unit_qty = item.qty_request * conversion_ratio;
 
         let fulfillment_status = 'TIDAK';
         let item_status = 'PROSES_BELANJA';
@@ -179,12 +182,14 @@ export async function createOrder(data: {
         itemStatuses.push(item_status);
         qtyApproveds.push(Math.max(0.001, item.qty_request));
         approvedSmallestQtys.push(smallest_unit_qty);
+        requestedUnits.push(item.requested_unit ?? null);
+        requestedRatios.push(item.requested_conversion_ratio ?? null);
       }
 
       await client.query(
-        `INSERT INTO order_items (order_id, item_id, qty_request, additional_notes, smallest_unit_qty, fulfillment_status, item_status, qty_approved, approved_smallest_qty)
-         SELECT * FROM UNNEST ($1::int[], $2::int[], $3::numeric[], $4::text[], $5::numeric[], $6::varchar[], $7::varchar[], $8::numeric[], $9::numeric[])`,
-        [orderIds, _itemIds, qtyRequests, additionalNotes, smallestUnitQtys, fulfillmentStatuses, itemStatuses, qtyApproveds, approvedSmallestQtys]
+        `INSERT INTO order_items (order_id, item_id, qty_request, additional_notes, smallest_unit_qty, fulfillment_status, item_status, qty_approved, approved_smallest_qty, requested_unit, requested_conversion_ratio)
+         SELECT * FROM UNNEST ($1::int[], $2::int[], $3::numeric[], $4::text[], $5::numeric[], $6::varchar[], $7::varchar[], $8::numeric[], $9::numeric[], $10::varchar[], $11::numeric[])`,
+        [orderIds, _itemIds, qtyRequests, additionalNotes, smallestUnitQtys, fulfillmentStatuses, itemStatuses, qtyApproveds, approvedSmallestQtys, requestedUnits, requestedRatios]
       );
     }
 
@@ -206,7 +211,10 @@ export async function getOrderRecap(opts?: { status?: string; outletId?: number 
   // yang menghitung ending_balance terbaru sekali untuk semua item (DISTINCT ON).
   const result = await query(
     `SELECT o.id AS order_id, o.outlet_id, outlet.name AS outlet_name, o.order_date, o.delivery_date, o.status,
-            oi.id AS order_item_id, oi.item_id, i.name AS item_name, i.barcode, i.purchase_unit, i.smallest_unit, i.conversion_ratio,
+            oi.id AS order_item_id, oi.item_id, i.name AS item_name, i.barcode, 
+            COALESCE(oi.requested_unit, i.purchase_unit) AS purchase_unit, 
+            i.smallest_unit, 
+            COALESCE(oi.requested_conversion_ratio, i.conversion_ratio) AS conversion_ratio,
             oi.qty_request, oi.qty_approved, oi.smallest_unit_qty, oi.approved_smallest_qty, oi.additional_notes, oi.center_notes, oi.fulfillment_status, oi.item_status, oi.distribution_price,
             c.name AS category_name, i.current_average_price,
             COALESCE(latest_bal.ending_balance, 0) AS current_stock
@@ -377,7 +385,7 @@ export async function autoFulfillPendingRequestsBulk(client: PoolClient, trigger
 }
 
 export async function getAggregatedRequestsByProduct(opts?: { status?: string; startDate?: string; endDate?: string }) {
-  const conditions: string[] = ["oi.item_status IN ('PENDING', 'PROSES_BELANJA')"];
+  const conditions: string[] = ["oi.item_status IN ('PENDING', 'PROSES_BELANJA', 'READY_DI_GUDANG')"];
   const params: unknown[] = [];
   let i = 1;
 

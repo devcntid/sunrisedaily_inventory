@@ -162,7 +162,7 @@ export default function InventoryValueTablePage() {
                   const valCurrent = Math.round(Number(r.current_balance) * ma);
                   
                   return (
-                    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={`inv-${r.item_id ?? i}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td className="font-bold" style={{ padding: '8px 24px' }}>{r.item_name}</td>
                       <td className="muted" style={{ padding: '8px 24px' }}>{r.category_name}</td>
                       <td className="right num" style={{ padding: '8px 24px' }}>Rp {valIn.toLocaleString('id-ID')}</td>
@@ -218,7 +218,7 @@ export default function InventoryValueTablePage() {
                 return getPageNumbers(currentPage, totalPages).map((p, i) => (
                   typeof p === 'number' ? (
                     <Button
-                      key={i}
+                      key={`page-btn-${i}`}
                       variant={p === currentPage ? "primary" : "outline"}
                       onClick={() => setCurrentPage(p)}
                       style={{ 
@@ -234,7 +234,7 @@ export default function InventoryValueTablePage() {
                       {p}
                     </Button>
                   ) : (
-                    <span key={i} className="muted" style={{ padding: '0 4px', fontSize: 12 }}>{p}</span>
+                    <span key={`page-sep-${i}`} className="muted" style={{ padding: '0 4px', fontSize: 12 }}>{p}</span>
                   )
                 ));
               })()}

@@ -42,7 +42,6 @@ export default function DirectPurchasesPage() {
         }
       }
     } catch (e) {
-      console.error(e);
     } finally {
       setDetailLoading(false);
     }
@@ -57,7 +56,6 @@ export default function DirectPurchasesPage() {
         setPurchases(data);
       }
     } catch (e) {
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -200,7 +198,7 @@ export default function DirectPurchasesPage() {
                       displayNote = match[2];
                     }
                     return (
-                      <tr key={idx}>
+                      <tr key={`item-${item.item_id || idx}-${idx}`}>
                         <td>
                           <div className="font-bold">{item.item_name}</div>
                           {item.brand_name && <div className="muted" style={{ fontSize: 12 }}>Merek: {item.brand_name}</div>}

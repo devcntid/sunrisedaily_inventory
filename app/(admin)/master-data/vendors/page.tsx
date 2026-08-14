@@ -151,7 +151,6 @@ export default function VendorsPage() {
         setHistoryItems(data.data || []);
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setHistoryLoading(false);
     }
@@ -508,7 +507,7 @@ export default function VendorsPage() {
                 </thead>
                 <tbody>
                   {filteredHistoryItems.map((item, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                    <tr key={`po-${item.po_id}-${i}`} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
                       <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }} className="font-mono font-medium">
                         <a href={`/procurement/orders/${item.po_id}`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'var(--primary)' }}>
                           {item.po_number}
@@ -581,7 +580,7 @@ export default function VendorsPage() {
               </thead>
               <tbody>
                 {importPreviewData.map((row, i) => (
-                  <tr key={i} style={{ background: row.isValid ? 'transparent' : '#fef2f2' }}>
+                  <tr key={`import-${row.row_index ?? i}`} style={{ background: row.isValid ? 'transparent' : '#fef2f2' }}>
                     <td style={{ textAlign: 'center' }}>{row.row_index}</td>
                     <td style={{ textAlign: 'center' }}>
                       {row.action === 'INSERT' ? (

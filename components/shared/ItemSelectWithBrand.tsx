@@ -63,7 +63,7 @@ export function ItemSelectWithBrand({ value, onChange, items, placeholder = 'Ket
         // Masukkan parent sebagai Group Header
         result.push({
           value: `group-${parent.id}`,
-          label: `📦 ${parent.name}`,
+          label: parent.name,
           isGroup: true
         });
 
@@ -72,7 +72,7 @@ export function ItemSelectWithBrand({ value, onChange, items, placeholder = 'Ket
         myChildren.forEach(child => {
           result.push({
             value: child.id,
-            label: `   ↳ ${child.name}` // indentasi
+            label: `    ${child.name}` // indentasi
           });
         });
       }

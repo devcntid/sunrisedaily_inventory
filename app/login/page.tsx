@@ -80,7 +80,7 @@ export default function LoginPage() {
                   <Image src="/logo-warna.png" alt="Sunrise Daily" width={80} height={80} priority style={{ objectFit: 'contain', width: 'auto', height: 'auto' }} />
                 </div>
                 <h1 style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-cabin, Cabin, sans-serif)', color: '#1a2e25', marginBottom: 2 }}>Sunrise Daily</h1>
-                <p style={{ fontSize: 11, color: '#8aaa9a', textAlign: 'center', lineHeight: 1.4 }}>Centralized Procurement &amp; Inventory System</p>
+                <p style={{ fontSize: 11, color: '#8aaa9a', textAlign: 'center', lineHeight: 1.4 }}>Pusat Pengadaan & Sistem Inventaris</p>
               </div>
 
               {/* Form */}

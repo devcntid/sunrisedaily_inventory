@@ -43,10 +43,11 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const breakdown = recipeIngredients.map(ing => {
+      const breakdown = recipeIngredients.map((ing, i) => {
         const stock = Math.max(0, stockMap[Number(ing.item_id)] || 0);
         const needed = Number(ing.quantity);
         return {
+          ingredient_id: Number(ing.item_id) || i,
           ingredient_name: ing.ingredient_name || 'Unknown',
           needed_per_portion: needed,
           current_stock: stock,

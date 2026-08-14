@@ -150,6 +150,7 @@ export type HppVsSale = {
 };
 
 export type HppKitchenSummary = {
+  recipe_id: bigint;
   recipe_name: string;
   yield_amount: number;
   yield_unit: string | null;
@@ -480,6 +481,7 @@ export async function getHppKitchenSummary(): Promise<HppKitchenSummary[]> {
   const res = await query<HppKitchenSummary>(`
     WITH v_kitchen_hpp_summary AS (
       SELECT
+        r.id AS recipe_id,
         r.name AS recipe_name,
         r.yield AS yield_amount,
         r.yield_unit,
@@ -492,7 +494,7 @@ export async function getHppKitchenSummary(): Promise<HppKitchenSummary[]> {
       LEFT JOIN menus m ON m.id = r.menu_id
     )
     SELECT 
-      recipe_name, yield_amount, yield_unit,
+      recipe_id, recipe_name, yield_amount, yield_unit,
       sale_price, raw_cost, total_cost_with_xfactor,
       cost_per_unit_yield, hpp_ratio_pct
     FROM v_kitchen_hpp_summary
@@ -637,7 +639,7 @@ export async function createRecipe(data: {
           category_id = COALESCE($3, menus.category_id),
           sale_price = COALESCE($4, menus.sale_price),
           hpp = r.total_cost / NULLIF(r.yield, 0),
-          hpp_ratio = (r.total_cost / NULLIF(r.yield, 0)) / NULLIF(COALESCE($4, menus.sale_price), 0)
+          hpp_ratio = LEAST((r.total_cost / NULLIF(r.yield, 0)) / NULLIF(COALESCE($4, menus.sale_price), 0), 99.999999)
         FROM recipes r
         WHERE r.id = $1 AND menus.id = $2
       `, [recipeId, menuId, data.category_id || null, data.sale_price ?? null]);
@@ -718,7 +720,7 @@ export async function updateRecipe(id: number, data: {
       UPDATE menus
       SET 
         hpp = r.total_cost / NULLIF(r.yield, 0),
-        hpp_ratio = (r.total_cost / NULLIF(r.yield, 0)) / NULLIF(menus.sale_price, 0)
+        hpp_ratio = LEAST((r.total_cost / NULLIF(r.yield, 0)) / NULLIF(menus.sale_price, 0), 99.999999)
       FROM recipes r
       WHERE r.id = $1 AND menus.id = r.menu_id
     `, [id]);
@@ -727,7 +729,7 @@ export async function updateRecipe(id: number, data: {
       await client.query(`
         UPDATE menus 
         SET sale_price = $1,
-            hpp_ratio = hpp / NULLIF($1, 0)
+            hpp_ratio = LEAST(hpp / NULLIF($1, 0), 99.999999)
         WHERE id = (SELECT menu_id FROM recipes WHERE id = $2)
       `, [data.sale_price, id]);
     }
@@ -907,7 +909,7 @@ export async function syncMenuHppByItems(client: PoolClient, itemIds: number[]) 
   await client.query(`
     UPDATE menus m
     SET hpp = r.total_cost / NULLIF(r.yield, 0),
-        hpp_ratio = (r.total_cost / NULLIF(r.yield, 0)) / NULLIF(m.sale_price, 0)
+        hpp_ratio = LEAST((r.total_cost / NULLIF(r.yield, 0)) / NULLIF(m.sale_price, 0), 99.999999)
     FROM recipes r
     WHERE m.id = r.menu_id
       AND r.id IN (

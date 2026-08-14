@@ -48,7 +48,6 @@ export default function OutletInventoryStockPage() {
         setLoading(false);
       })
       .catch(err => {
-        console.error(err);
         setLoading(false);
       });
   };
@@ -73,7 +72,6 @@ export default function OutletInventoryStockPage() {
         fetchData(true); // reload silently
       }
     } catch (e) {
-      console.error(e);
     } finally {
       setSaving(false);
     }

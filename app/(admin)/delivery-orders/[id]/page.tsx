@@ -59,7 +59,6 @@ const QrCodeRender = ({ text, size = 44 }: { text: string, size?: number }) => {
           includetext: false,
         });
       } catch (e) {
-        console.error(e);
       }
     }
   }, [text]);

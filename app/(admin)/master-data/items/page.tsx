@@ -851,13 +851,12 @@ export default function ItemsPage() {
                     <input
                       className="input"
                       type="text"
-                      disabled={form.has_brands}
                       value={formatNumberInput(form.conversion_ratio)}
                       onChange={e => {
                         const raw = parseNumberInput(e.target.value);
                         if (/^\d*\.?\d*$/.test(raw)) setForm(f => ({ ...f, conversion_ratio: raw }));
                       }}
-                      style={{ paddingRight: 60, background: form.has_brands ? '#f1f5f9' : '#fff' }}
+                      style={{ paddingRight: 60 }}
                     />
                     <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--muted)' }}>{form.smallest_unit}</span>
                   </div>
@@ -926,116 +925,7 @@ export default function ItemsPage() {
                 </div>
               )}
 
-              {/* BRANDS SECTION MOVED HERE TO FILL EMPTY SPACE */}
-              {form.has_brands && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px', marginTop: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: brands.length > 0 ? 12 : 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--foreground)' }}>
-                      Daftar Brand
-                    </span>
-                    <Button variant="outline" size="sm" onClick={() => setBrands([...brands, { name: '', barcode: '', purchase_unit: form.purchase_unit || '', purchase_price: form.purchase_price, conversion_ratio: form.conversion_ratio || '1', is_active: true }])} style={{ padding: '4px 8px', fontSize: 12, height: 'auto' }}>
-                      + Tambah
-                    </Button>
-                  </div>
-                  {brands.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {brands.map((brand, i) => (
-                        <div key={i} style={{ paddingBottom: 12, borderBottom: i === brands.length - 1 ? 'none' : '1px dashed #cbd5e1' }}>
-                          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 140px' }}>
-                              {i === 0 && <label className="form-label" style={{ fontSize: 11 }}>Nama Brand *</label>}
-                              <input className="input" placeholder="Susu Diamond" value={brand.name} disabled={brand.is_active === false} onChange={e => {
-                                const newBrands = [...brands];
-                                newBrands[i].name = e.target.value;
-                                if (!newBrands[i].barcode) newBrands[i].barcode = autoGenerateSKU(e.target.value, form.name, i);
-                                setBrands(newBrands);
-                              }} style={{ fontSize: 12, padding: '6px 10px' }} />
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 120px' }}>
-                              {i === 0 && <label className="form-label" style={{ fontSize: 11 }}>SKU</label>}
-                              <input className="input" placeholder="Auto" value={brand.barcode} disabled={brand.is_active === false} onChange={e => {
-                                const newBrands = [...brands];
-                                newBrands[i].barcode = e.target.value;
-                                setBrands(newBrands);
-                              }} style={{ fontSize: 12, padding: '6px 10px' }} />
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 100px' }}>
-                              {i === 0 && <label className="form-label" style={{ fontSize: 11 }}>Satuan Beli</label>}
-                              <select className="input" value={brand.purchase_unit} disabled={brand.is_active === false} onChange={e => {
-                                const newBrands = [...brands];
-                                newBrands[i].purchase_unit = e.target.value;
-                                setBrands(newBrands);
-                              }} style={{ fontSize: 12, padding: '6px 10px' }}>
-                                <option value="">-- Pilih --</option>
-                                {PURCHASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                              </select>
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 80px' }}>
-                              {i === 0 && <label className="form-label" style={{ fontSize: 11 }}>Isi/Satuan</label>}
-                              <input className="input" placeholder="12" value={brand.conversion_ratio ? formatNumberInput(Number(brand.conversion_ratio)) : ''} disabled={brand.is_active === false} onChange={e => {
-                                const raw = parseNumberInput(e.target.value);
-                                if (/^\d*\.?\d*$/.test(raw)) {
-                                  const newBrands = [...brands];
-                                  newBrands[i].conversion_ratio = raw;
-                                  setBrands(newBrands);
-                                }
-                              }} style={{ fontSize: 12, padding: '6px 10px' }} />
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 0, flex: '1 1 120px' }}>
-                              {i === 0 && <label className="form-label" style={{ fontSize: 11 }}>Harga Beli (Rp)</label>}
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <input className="input" type="text" value={brand.purchase_price ? formatNumberInput(Math.round(Number(brand.purchase_price))) : ''} disabled={brand.is_active === false} onChange={e => {
-                                  const raw = parseNumberInput(e.target.value);
-                                  if (/^\d*$/.test(raw)) {
-                                    const newBrands = [...brands];
-                                    newBrands[i].purchase_price = raw;
-                                    setBrands(newBrands);
-                                  }
-                                }} style={{ fontSize: 12, padding: '6px 10px' }} />
-                                <button className="btn-icon danger" onClick={() => {
-                                  if (brands.length === 1) {
-                                    setBrands([{ name: '', barcode: '', purchase_unit: '', purchase_price: '', conversion_ratio: '1', is_active: true }]);
-                                    return;
-                                  }
-                                  const newBrands = [...brands];
-                                  newBrands.splice(i, 1);
-                                  setBrands(newBrands);
-                                }} title="Hapus Brand" style={{ padding: 6 }}>
-                                  <Trash2 size={14} />
-                                </button>
-                                <Toggle 
-                                  checked={brand.is_active !== false} 
-                                  onChange={(checked) => {
-                                    const newBrands = [...brands];
-                                    newBrands[i].is_active = checked;
-                                    setBrands(newBrands);
-                                  }} 
-                                  size="sm"
-                                  title={brand.is_active !== false ? "Nonaktifkan Brand" : "Aktifkan Brand"}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          {brand.id && (
-                            <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              {brand.last_purchase_price != null && Number(brand.last_purchase_price) > 0 && (
-                                <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: 4, fontWeight: 500 }}>
-                                  Beli Terakhir: {fmtCurrency(Number(brand.last_purchase_price) * Number(brand.conversion_ratio || 1))} / {brand.purchase_unit || 'Satuan'}
-                                </span>
-                              )}
-                              {brand.current_average_price != null && Number(brand.current_average_price) > 0 && (
-                                <span style={{ fontSize: 11, background: '#eff6ff', color: '#1d4ed8', padding: '3px 8px', borderRadius: 4, fontWeight: 500 }}>
-                                  HPP Saat Ini: {fmtCurrency(Number(brand.current_average_price) * Number(brand.conversion_ratio || 1))} / {brand.purchase_unit || 'Satuan'}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+
             </div>
 
             {/* RIGHT COLUMN: Settings & Toggles */}
@@ -1111,12 +1001,125 @@ export default function ItemsPage() {
                 <Toggle size="sm" checked={form.is_active} onChange={c => setForm(f => ({ ...f, is_active: c }))} />
               </div>
             </div>
-
           </div>
 
-          </div>
+          {/* BRANDS SECTION MOVED OUTSIDE GRID TO SPAN FULL WIDTH */}
+          {form.has_brands && (
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px', marginTop: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: brands.length > 0 ? 12 : 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>
+                  Daftar Brand / Varian
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setBrands([...brands, { name: '', barcode: '', purchase_unit: form.purchase_unit || '', purchase_price: form.purchase_price, conversion_ratio: form.conversion_ratio || '1', is_active: true }])} style={{ padding: '6px 12px', fontSize: 12 }}>
+                  + Tambah Brand
+                </Button>
+              </div>
+              {brands.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {brands.map((brand, i) => (
+                    <div key={brand.id ?? brand.barcode ?? `brand-${i}`} style={{ paddingBottom: 16, borderBottom: i === brands.length - 1 ? 'none' : '1px dashed #cbd5e1' }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '2 1 200px' }}>
+                          {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>Nama Brand *</label>}
+                          <input className="input" placeholder="Susu Diamond" value={brand.name} disabled={brand.is_active === false} onChange={e => {
+                            const newBrands = [...brands];
+                            newBrands[i].name = e.target.value;
+                            if (!newBrands[i].barcode) newBrands[i].barcode = autoGenerateSKU(e.target.value, form.name, i);
+                            setBrands(newBrands);
+                          }} style={{ fontSize: 13, padding: '8px 12px' }} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '1 1 140px' }}>
+                          {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>SKU / Barcode</label>}
+                          <input className="input" placeholder="Auto" value={brand.barcode} disabled={brand.is_active === false} onChange={e => {
+                            const newBrands = [...brands];
+                            newBrands[i].barcode = e.target.value;
+                            setBrands(newBrands);
+                          }} style={{ fontSize: 13, padding: '8px 12px' }} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '1 1 120px' }}>
+                          {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>Satuan Beli</label>}
+                          <select className="input" value={brand.purchase_unit} disabled={brand.is_active === false} onChange={e => {
+                            const newBrands = [...brands];
+                            newBrands[i].purchase_unit = e.target.value;
+                            setBrands(newBrands);
+                          }} style={{ fontSize: 13, padding: '8px 12px' }}>
+                            <option value="">-- Pilih --</option>
+                            {PURCHASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '1 1 100px' }}>
+                          {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>Isi/Satuan</label>}
+                          <input className="input" placeholder="12" value={brand.conversion_ratio ? formatNumberInput(Number(brand.conversion_ratio)) : ''} disabled={brand.is_active === false} onChange={e => {
+                            const raw = parseNumberInput(e.target.value);
+                            if (/^\d*\.?\d*$/.test(raw)) {
+                              const newBrands = [...brands];
+                              newBrands[i].conversion_ratio = raw;
+                              setBrands(newBrands);
+                            }
+                          }} style={{ fontSize: 13, padding: '8px 12px' }} />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '1.5 1 160px' }}>
+                          {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>Harga Beli (Rp)</label>}
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <input className="input" type="text" value={brand.purchase_price ? formatNumberInput(Math.round(Number(brand.purchase_price))) : ''} disabled={brand.is_active === false} onChange={e => {
+                              const raw = parseNumberInput(e.target.value);
+                              if (/^\d*$/.test(raw)) {
+                                const newBrands = [...brands];
+                                newBrands[i].purchase_price = raw;
+                                setBrands(newBrands);
+                              }
+                            }} style={{ fontSize: 13, padding: '8px 12px' }} />
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn-icon danger" onClick={() => {
+                                if (brands.length === 1) {
+                                  setBrands([{ name: '', barcode: '', purchase_unit: '', purchase_price: '', conversion_ratio: '1', is_active: true }]);
+                                  return;
+                                }
+                                const newBrands = [...brands];
+                                newBrands.splice(i, 1);
+                                setBrands(newBrands);
+                              }} title="Hapus Brand" style={{ padding: 8, height: 36, width: 36 }}>
+                                <Trash2 size={16} />
+                              </button>
+                              <div style={{ padding: '0 4px', height: 36, display: 'flex', alignItems: 'center' }}>
+                                <Toggle 
+                                  checked={brand.is_active !== false} 
+                                  onChange={(checked) => {
+                                    const newBrands = [...brands];
+                                    newBrands[i].is_active = checked;
+                                    setBrands(newBrands);
+                                  }} 
+                                  size="sm"
+                                  title={brand.is_active !== false ? "Nonaktifkan Brand" : "Aktifkan Brand"}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      {brand.id && (
+                        <div style={{ marginTop: 10, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {brand.last_purchase_price != null && Number(brand.last_purchase_price) > 0 && (
+                            <span style={{ fontSize: 12, background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
+                              Beli Terakhir: {fmtCurrency(Number(brand.last_purchase_price) * Number(brand.conversion_ratio || 1))} / {brand.purchase_unit || 'Satuan'}
+                            </span>
+                          )}
+                          {brand.current_average_price != null && Number(brand.current_average_price) > 0 && (
+                            <span style={{ fontSize: 12, background: '#eff6ff', color: '#1d4ed8', padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>
+                              HPP Saat Ini: {fmtCurrency(Number(brand.current_average_price) * Number(brand.conversion_ratio || 1))} / {brand.purchase_unit || 'Satuan'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-        </Modal>
+          </div>
+      </Modal>
 
       <ConfirmDialog
         open={!!confirmDelete}

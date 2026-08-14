@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const res = await query(
       `SELECT delivery_note_number, status FROM delivery_notes 
        WHERE outlet_id = $1 AND delivery_date = $2 
-       AND status IN ('DRAFT', 'SHIPPED')
+       AND status IN ('DRAFT', 'DIKIRIM')
        LIMIT 1`,
       [outletId, deliveryDate]
     );
