@@ -174,7 +174,6 @@ export default function PurchaseOrdersPage() {
         });
       }
     } catch (e) {
-      console.error(e);
       setToast({ isOpen: true, message: 'Gagal memuat barang dengan stok rendah', type: 'error' });
     }
   }
@@ -219,7 +218,6 @@ export default function PurchaseOrdersPage() {
       setError('Ada Bahan Utama yang belum dipilih Brand-nya. Mohon lengkapi pilihan Brand (Wajib) atau hapus baris tersebut.');
       return;
     }
-
     const validLines = lines.filter(l => (l.type === 'product' ? (l.item_id && l.qty && l.unit_price) : l.description));
     if (!validLines.length) { setError('Minimal 1 item/bahan harus diisi dengan lengkap.'); return; }
 
@@ -469,7 +467,6 @@ export default function PurchaseOrdersPage() {
         URL.revokeObjectURL(url);
       }
     } catch (err) {
-      console.error('Gagal download PDF', err);
     }
   };
 
@@ -486,6 +483,20 @@ export default function PurchaseOrdersPage() {
     // Basic validation before opening
     if (!form.vendor_id || !form.deliver_to) {
       setError('Mohon lengkapi Vendor dan Deliver To terlebih dahulu.');
+      return;
+    }
+    const hasIncompleteBrand = lines.some(l => l.type === 'product' && l.parent_id && !l.item_id);
+    if (hasIncompleteBrand) {
+      setError('Ada Bahan Utama yang belum dipilih Brand-nya. Mohon lengkapi pilihan Brand (Wajib) atau hapus baris tersebut.');
+      return;
+    }
+
+    const validLines = lines.filter(l => (l.type === 'product' ? (l.item_id && l.qty && l.unit_price) : l.description));
+    if (!validLines.length) { setError('Minimal 1 item/bahan harus diisi dengan lengkap.'); return; }
+
+    const invalidQtyOrPrice = validLines.some(l => l.type === 'product' && (Number(l.qty) <= 0 || Number(l.unit_price) < 0));
+    if (invalidQtyOrPrice) {
+      setError('Kuantitas (Qty) produk harus lebih dari 0 dan Harga Satuan tidak boleh minus.');
       return;
     }
     const selectedVendor = vendors.find(v => String(v.id) === form.vendor_id);
@@ -910,7 +921,7 @@ export default function PurchaseOrdersPage() {
                             {lines.map((line, idx) => {
                               if (line.type === 'note') {
                                 return (
-                                  <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                  <tr key={`note-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                     <td style={{ padding: '8px 16px' }}>
                                       <textarea className="input" rows={2} style={{ width: '100%', resize: 'none', fontStyle: 'italic', fontSize: 13 }} placeholder="Ketik catatan..." value={line.description} onChange={e => updateLine(idx, 'description', e.target.value)} />
                                     </td>
@@ -924,7 +935,7 @@ export default function PurchaseOrdersPage() {
                                 );
                               }
                               return (
-                                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <tr key={`line-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                   <td style={{ padding: '6px 8px', position: 'relative' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                       <Select

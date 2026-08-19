@@ -31,6 +31,7 @@ type IngRow = {
   used_in_recipes: number;
 };
 type KitchenRow = {
+  recipe_id: bigint;
   recipe_name: string; yield_amount: number;
   yield_unit: string | null; sale_price: number;
   raw_cost: number | null; total_cost_with_xfactor: number | null;
@@ -485,7 +486,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
                   };
 
                   return (
-                    <tr key={i} style={{ background: rowBg }}>
+                    <tr key={`import-row-${row.row_index ?? i}`} style={{ background: rowBg }}>
                       <td style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>{row.row_index ?? '—'}</td>
                       <td>
                         <div style={{ fontWeight: 500, fontSize: 13 }}>{row.nama_menu}</div>
@@ -1108,7 +1109,7 @@ function KitchenTab() {
               </thead>
               <tbody>
                 {filtered.map((row, i) => (
-                  <tr key={i}>
+                  <tr key={String(row.recipe_id)}>
                     <td style={{ fontWeight: 600 }}>{row.recipe_name}</td>
 
                     <td className="right ">{Number(row.yield_amount).toLocaleString('id-ID')} <span className="muted">{row.yield_unit}</span></td>
@@ -1333,7 +1334,7 @@ export default function HppPage() {
             ].map((s, i) => {
               const Icon = s.icon;
               return (
-                <div key={i} style={{
+                <div key={s.label} style={{
                   flex: '1 1 150px', padding: '16px 20px', borderRight: i < 5 ? '1px solid var(--border)' : 'none',
                   borderBottom: i < 3 ? '1px solid var(--border)' : 'none', // For wrap
                   display: 'flex', flexDirection: 'column', gap: 8

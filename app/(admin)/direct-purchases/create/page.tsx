@@ -43,7 +43,6 @@ export default function CreateDirectPurchasePage() {
             setPendingSessions(parsed);
           }
         } catch (e) {
-          console.error('Failed to parse pendingMarketPurchases', e);
         }
       }
     }
@@ -277,7 +276,7 @@ export default function CreateDirectPurchasePage() {
                   const subtotal = (Number(line.qty) || 0) * (Number(line.unit_price) || 0);
 
                   return (
-                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <tr key={line.item_id ? `line-${line.item_id}-${idx}` : `line-${idx}`} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: '8px 12px' }}>
                         <Select 
                           value={line.item_id}

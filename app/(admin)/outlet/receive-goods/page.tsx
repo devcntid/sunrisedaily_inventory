@@ -93,7 +93,6 @@ export default function ReceiveGoodsPage() {
         setRequireBarcode(setData.data?.require_barcode_scan !== 'false');
       }
     } catch (err) {
-      console.error(err);
     } finally {
       if (!isQuiet) setLoading(false);
     }

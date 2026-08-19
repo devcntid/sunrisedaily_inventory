@@ -149,7 +149,7 @@ export async function createLocalPurchase(
         )
         UPDATE menus m
         SET hpp = r.total_cost / NULLIF(r.yield, 0),
-            hpp_ratio = (r.total_cost / NULLIF(r.yield, 0)) / NULLIF(m.sale_price, 0)
+            hpp_ratio = LEAST((r.total_cost / NULLIF(r.yield, 0)) / NULLIF(m.sale_price, 0), 99.999999)
         FROM recipes r
         JOIN recipe_totals rt ON r.id = rt.recipe_id
         WHERE m.id = r.menu_id AND r.id IN (

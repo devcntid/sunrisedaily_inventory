@@ -337,6 +337,7 @@ export async function getOutletHppKitchenSummary(outletId: number) {
   
   const res = await query(`
     SELECT DISTINCT
+      r.id AS recipe_id,
       k.recipe_name, k.yield_amount, k.yield_unit,
       k.sale_price, k.raw_cost, k.total_cost_with_xfactor,
       k.cost_per_unit_yield, k.hpp_ratio_pct

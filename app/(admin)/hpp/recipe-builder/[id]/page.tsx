@@ -282,7 +282,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
               {showMenuSuggestions && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 4, zIndex: 10, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginTop: 2 }}>
                   {menuSuggestions.map((s, idx) => (
-                    <div key={idx} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: idx < menuSuggestions.length - 1 ? '1px solid var(--border)' : 'none' }} onClick={() => selectSuggestion(s)} onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                    <div key={s} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: idx < menuSuggestions.length - 1 ? '1px solid var(--border)' : 'none' }} onClick={() => selectSuggestion(s)} onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
                       {s}
                     </div>
                   ))}

@@ -41,7 +41,6 @@ export function CentralLocalPurchaseView() {
         setOutlets(data.data);
       }
     } catch (err) {
-      console.error(err);
     }
   };
 
@@ -59,7 +58,6 @@ export function CentralLocalPurchaseView() {
         setCurrentPage(1); // Reset page on filter
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }

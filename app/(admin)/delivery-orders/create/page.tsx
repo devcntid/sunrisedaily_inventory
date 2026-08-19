@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Table } from '@/components/ui/Table';
@@ -49,6 +49,7 @@ export default function CreateDeliveryOrderPage() {
     delivery_date: new Date().toISOString().split('T')[0],
     driver_name: '',
   });
+  const driverNameRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -171,7 +172,8 @@ export default function CreateDeliveryOrderPage() {
            
            if (matchedItems.length > 0) {
              const prefilled = matchedItems.map((itemData, index) => {
-                const currentStock = parseFloat(String(itemData.current_stock)) || 0;
+                const parentStock = itemData.parent_id ? (allItems.find(i => String(i.id) === String(itemData.parent_id))?.current_stock || 0) : itemData.current_stock;
+                const currentStock = parseFloat(String(parentStock)) || 0;
                 const ratio = parseFloat(String(itemData.conversion_ratio)) || 1;
                 const hasStockForOneUnit = currentStock >= ratio;
                 
@@ -267,7 +269,7 @@ export default function CreateDeliveryOrderPage() {
       conversion_ratio: itemData.conversion_ratio,
       current_average_price: itemData.current_average_price,
       barcode: itemData.barcode,
-      current_stock: parseFloat(String(itemData.current_stock)) || 0
+      current_stock: parseFloat(String(itemData.parent_id ? (allItems.find(p => String(p.id) === String(itemData.parent_id))?.current_stock || 0) : itemData.current_stock)) || 0
     } : i));
   };
 
@@ -379,7 +381,7 @@ export default function CreateDeliveryOrderPage() {
       const payload = {
         order_id: selectedOrderId === 'DIRECT' ? null : Number(selectedOrderId),
         outlet_id: Number(targetOutletId),
-        driver_name: form.driver_name,
+        driver_name: driverNameRef.current?.value || form.driver_name || '',
         delivery_date: form.delivery_date,
         items: selectedItems.map(i => ({
           order_item_id: i.order_item_id,
@@ -500,7 +502,7 @@ export default function CreateDeliveryOrderPage() {
             </div>
             <div className="form-group">
               <label className="req">Nama Sopir / Pengirim</label>
-              <Input type="text" placeholder="Wajib diisi" value={form.driver_name} onChange={e => setForm(f => ({ ...f, driver_name: e.target.value }))} />
+              <Input type="text" placeholder="Wajib diisi" ref={driverNameRef} defaultValue={form.driver_name} />
             </div>
           </div>
 
@@ -624,16 +626,11 @@ export default function CreateDeliveryOrderPage() {
                         <td className="font-bold">
                           {item.is_additional ? (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
-                              <Select
+                              <ItemSelectWithBrand
                                 value={String(item.item_id || '')}
                                 onChange={(val) => handleSelectParent(item.order_item_id, String(val))}
-                                options={[
-                                  { value: '', label: 'Pilih Barang...' },
-                                  ...allItems
-                                    .filter(i => i.parent_id || !allItems.some(child => child.parent_id === i.id))
-                                    .map(i => ({ value: String(i.id), label: i.parent_id ? `${allItems.find(p => p.id === i.parent_id)?.name || ''} - ${i.name}` : i.name }))
-                                ]}
-                                searchable
+                                items={allItems}
+                                parentOnly={true}
                               />
                             </div>
                           ) : (

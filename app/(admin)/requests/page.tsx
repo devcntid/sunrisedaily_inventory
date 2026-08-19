@@ -194,7 +194,6 @@ function RequestsContent() {
         } : null);
       }
     } catch (e) {
-      console.error(e);
       setToast({ open: true, message: 'Gagal menolak item', type: 'error' });
     } finally {
       setSaving(null);
@@ -334,7 +333,6 @@ function RequestsContent() {
         setHistories(histData.data);
       }
     } catch (e) {
-      console.error('Failed to save history', e);
     }
     
     setPdfPreviewUrl(null);
@@ -848,7 +846,7 @@ function RequestsContent() {
               </thead>
               <tbody>
                 {selectedAggProduct?.breakdown?.map((b, i) => (
-                  <tr key={i} style={{ borderBottom: i < (selectedAggProduct.breakdown?.length || 0) - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                  <tr key={`breakdown-${b.order_id ?? i}`} style={{ borderBottom: i < (selectedAggProduct.breakdown?.length || 0) - 1 ? '1px solid #e2e8f0' : 'none' }}>
                     <td style={{ padding: '8px 12px', fontWeight: 600, fontSize: 12, color: 'var(--ink)' }}>{b.outlet_name}</td>
                     <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--ink)' }}>{formatDate(b.order_date)}</td>
                     <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--primary)', fontSize: 12 }}>

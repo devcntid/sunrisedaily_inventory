@@ -25,27 +25,29 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { order_date, delivery_date, items } = body;
+  const { order_date, delivery_date, items, confirm_duplicate } = body;
 
   if (!delivery_date || !items?.length) {
     return NextResponse.json({ success: false, message: 'Data tidak lengkap', data: null }, { status: 400 });
   }
 
   // Double-check validation against active items to prevent bypass
-  try {
-    const activeIds = await getActiveRequestedItemIds(session.outletId!);
-    const duplicateItems = items.filter((i: { item_id: string | number }) => activeIds.includes(Number(i.item_id)));
+  if (!confirm_duplicate) {
+    try {
+      const activeIds = await getActiveRequestedItemIds(session.outletId!);
+      const duplicateItems = items.filter((i: { item_id: string | number }) => activeIds.includes(Number(i.item_id)));
 
-
-    if (duplicateItems.length > 0) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Beberapa barang masih dalam pesanan aktif (belum selesai). Hapus dari daftar sebelum melanjutkan.', 
-        data: null 
-      }, { status: 400 });
+      if (duplicateItems.length > 0) {
+        return NextResponse.json({ 
+          success: false, 
+          requires_confirmation: true,
+          message: 'Ada barang yang sama dengan pesanan Anda sebelumnya yang masih diproses Pusat (belum Diterima/Selesai). Yakin ingin memesan barang ini lagi?', 
+          data: null 
+        }, { status: 400 });
+      }
+    } catch (err) {
+      console.error('Error validating active items:', err);
     }
-  } catch (err) {
-    console.error('Error validating active items:', err);
   }
 
   const order = await createOrder({

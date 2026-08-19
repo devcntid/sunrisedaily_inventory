@@ -54,7 +54,6 @@ export default function DeliveryOrdersPage() {
       setNotes(data.data ?? []);
       setTotal(data.total ?? 0);
     } catch (err) {
-      console.error(err);
     } finally {
       if (!isQuiet) setLoading(false);
     }

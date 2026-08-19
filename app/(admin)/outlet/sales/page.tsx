@@ -68,7 +68,7 @@ export default function SalesAnalyticsPage() {
       .then(d => {
         if (d.success && d.data?.outlet_id) setOutletId(d.data.outlet_id);
       })
-      .catch(err => console.error('Error fetching session:', err));
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -88,7 +88,6 @@ export default function SalesAnalyticsPage() {
         if (json.lastSync) setLastSync(json.lastSync);
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -204,7 +203,7 @@ export default function SalesAnalyticsPage() {
               className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold bg-[#016e3f] text-white rounded-md hover:bg-[#015933] transition-colors shadow-sm disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Menarik Penjualan Hari Ini...' : 'Sync Penjualan (Hari Ini)'}
+              {syncing ? 'Menarik Penjualan...' : 'Sync Penjualan'}
             </button>
           </div>
         </div>

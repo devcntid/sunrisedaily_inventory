@@ -29,6 +29,7 @@ type IngRow = {
   used_in_recipes: number;
 };
 type KitchenRow = {
+  recipe_id: bigint;
   recipe_name: string; yield_amount: number;
   yield_unit: string | null; sale_price: number;
   raw_cost: number | null; total_cost_with_xfactor: number | null;
@@ -723,7 +724,7 @@ function KitchenTab() {
             </thead>
             <tbody>
               {filtered.map((row, i) => (
-                <tr key={i}>
+                <tr key={String(row.recipe_id)}>
                   <td style={{ fontWeight: 600 }}>{row.recipe_name}</td>
 
                   <td className="right ">{Number(row.yield_amount).toLocaleString('id-ID')} <span className="muted">{row.yield_unit}</span></td>
@@ -752,6 +753,7 @@ type CapacityItem = {
   has_ingredients: boolean;
   unit: string;
   breakdown: {
+    ingredient_id: number;
     ingredient_name: string;
     needed_per_portion: number;
     current_stock: number;
@@ -779,7 +781,6 @@ function CapacityTab() {
         setData(json.data || []);
       }
     } catch (error) {
-      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -950,7 +951,7 @@ function CapacityTab() {
                     detailModalItem.breakdown.map((b, i) => {
                       const isBottleneck = b.estimated_portions === detailModalItem.estimated_portions;
                       return (
-                        <tr key={i} style={{ background: isBottleneck ? '#fef2f2' : undefined }}>
+                        <tr key={`breakdown-${b.ingredient_id}`} style={{ background: isBottleneck ? '#fef2f2' : undefined }}>
                           <td style={{ fontWeight: 500 }}>
                             {b.ingredient_name}
                             {isBottleneck && <span style={{ marginLeft: 8, fontSize: 10, background: '#fee2e2', color: '#b91c1c', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>Limit Terendah</span>}

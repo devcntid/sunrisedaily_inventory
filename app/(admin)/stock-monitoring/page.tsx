@@ -105,7 +105,8 @@ export default function StockMonitoringPage() {
     return new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
   });
   const [syncing, setSyncing] = useState(false);
-
+  const syncingRef = useRef(false);
+  useEffect(() => { syncingRef.current = syncing; }, [syncing]);
   const [transferring, setTransferring] = useState(false);
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [modalFilterOutlet, setModalFilterOutlet] = useState('ALL');
@@ -263,7 +264,6 @@ export default function StockMonitoringPage() {
       const json = await res.json();
       if (json.success) setData(json.data);
     } catch (err) {
-      console.error(err);
       setToast({ open: true, message: 'Gagal mengambil data matriks stok', type: 'error' });
     } finally {
       setLoading(false);
@@ -273,9 +273,11 @@ export default function StockMonitoringPage() {
   useEffect(() => {
     fetchData();
 
-    // Auto-refresh when the window gains focus
+    // Auto-refresh when the window gains focus, but skip if we are currently syncing
     const handleFocus = () => {
-      fetchData();
+      if (!syncingRef.current) {
+        fetchData();
+      }
     };
 
     window.addEventListener('focus', handleFocus);
@@ -375,14 +377,6 @@ export default function StockMonitoringPage() {
                 ? 'Pantau total nilai aset barang yang telah didistribusikan ke masing-masing outlet.'
                 : 'Pantau ketersediaan stok fisik secara live di seluruh cabang dan pusat.'}
             </p>
-          </div>
-          <div style={{ visibility: loading ? 'visible' : 'hidden', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
-            {loading && (
-              <>
-                <RefreshCcw size={14} className="spin" />
-                Memuat data real-time...
-              </>
-            )}
           </div>
         </div>
 
@@ -998,7 +992,7 @@ export default function StockMonitoringPage() {
                   {criticalItems
                     .filter(item => !modalSearchTerm || item.name.toLowerCase().includes(modalSearchTerm.toLowerCase()))
                     .map((item, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '8px 12px', fontSize: 12, fontWeight: 500, color: '#0f172a', borderRight: '1px solid #e2e8f0', background: '#fff', left: 0, zIndex: 10, position: 'sticky', whiteSpace: 'nowrap' }}>
                         {item.name}
                       </td>

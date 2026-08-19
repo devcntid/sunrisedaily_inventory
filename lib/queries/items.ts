@@ -71,6 +71,7 @@ export async function getItems(opts?: { categoryId?: string; search?: string; ac
             (i.ingredient_id IS NOT NULL OR ing_by_item.id IS NOT NULL) AS is_hpp,
             COALESCE(ing_by_id.name, ing_by_item.name) AS ingredient_name,
             EXISTS(SELECT 1 FROM items child WHERE child.parent_id = i.id) AS has_children,
+            COALESCE((SELECT json_agg(json_build_object('id', child.id, 'name', child.name, 'purchase_unit', child.purchase_unit, 'conversion_ratio', child.conversion_ratio) ORDER BY child.name) FROM items child WHERE child.parent_id = i.id AND child.is_active = TRUE), '[]'::json) AS children,
             COALESCE((SELECT json_agg(venue_id ORDER BY venue_id) FILTER (WHERE venue_id IS NOT NULL) FROM item_venues WHERE item_id = i.id), '[]'::json) AS venue_ids
      FROM items i
      LEFT JOIN categories c ON c.id = i.category_id

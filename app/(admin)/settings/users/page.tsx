@@ -54,7 +54,6 @@ export default function UsersManagementPage() {
       const data = await res.json();
       if (data.success) setUsers(data.data);
     } catch (e) {
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -66,7 +65,6 @@ export default function UsersManagementPage() {
       const data = await res.json();
       if (data.success) setOutlets(data.data);
     } catch (e) {
-      console.error(e);
     }
   }
 

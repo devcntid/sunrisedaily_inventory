@@ -45,7 +45,7 @@ export default function ProcurementEstimationPage() {
       .then(d => {
         if (d.success && d.data?.outlet_id) setOutletId(d.data.outlet_id);
       })
-      .catch(err => console.error('Error fetching session:', err));
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -83,7 +83,6 @@ export default function ProcurementEstimationPage() {
         setData(enriched);
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }

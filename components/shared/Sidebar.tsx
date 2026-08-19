@@ -58,7 +58,7 @@ const CENTRAL_MENU: NavItem[] = [
   { href: '/requests', label: 'Permintaan Outlet', icon: <Icon name="list" /> },
   { href: '/delivery-orders', label: 'Pengiriman (Surat Jalan)', icon: <Icon name="truck" /> },
   { href: '/outlet-purchases', label: 'Belanja Outlet', icon: <Icon name="list" /> },
-  { href: '/returns', label: 'Tiket Masalah / Retur', icon: <AlertOctagon size={15} /> },
+  { href: '/returns', label: 'Tiket Masalah', icon: <AlertOctagon size={15} /> },
 
   { section: 'PEMBELIAN' },
   { href: '/purchase-orders', label: 'Pembelian (PO)', icon: <Icon name="cart" /> },

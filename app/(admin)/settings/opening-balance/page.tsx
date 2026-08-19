@@ -92,7 +92,6 @@ export default function OpeningBalancePage() {
 
         setPreviewData(validatedData);
       } catch (err: unknown) {
-        console.error(err);
         setError('Gagal membaca file Excel. Pastikan formatnya sesuai template.');
       }
     };
@@ -228,7 +227,7 @@ export default function OpeningBalancePage() {
                   </thead>
                   <tbody>
                     {previewData.map((row: any, idx: number) => (
-                      <tr key={idx} style={{ background: !row.valid ? '#fef2f2' : 'transparent' }}>
+                      <tr key={`ob-${row.item_id ?? idx}`} style={{ background: !row.valid ? '#fef2f2' : 'transparent' }}>
                         <td className="font-mono text-muted">{row.item_id}</td>
                         <td className="font-bold">{row.item_name}</td>
                         <td className="right font-bold num">{row.qty} <span className="muted" style={{ fontSize: 12 }}>{row.unit}</span></td>
