@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -12,7 +12,7 @@ import { MasterDataTabs } from '@/components/ui/MasterDataTabs';
 import { Toggle } from '@/components/ui/Toggle';
 import { Toast } from '@/components/ui/Toast';
 import { Select } from '@/components/ui/Select';
-import { HelpCircle, Info, Tag, Package, DollarSign, CheckCircle2, AlertCircle, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react';
+import { HelpCircle, Info, Tag, Package, DollarSign, CheckCircle2, AlertCircle, AlertTriangle, RotateCcw, Trash2, Download, Upload, XCircle } from 'lucide-react';
 import { PURCHASE_UNITS, SMALLEST_UNITS, normalizeUnit } from '@/lib/constants/units';
 
 interface Item {
@@ -159,6 +159,13 @@ export default function ItemsPage() {
   const [toastInfo, setToastInfo] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'info' });
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
 
+  // Excel import/export
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreviewData, setImportPreviewData] = useState<any[]>([]);
+  const [importSummary, setImportSummary] = useState<any>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importingStatus, setImportingStatus] = useState(false);
+
   // Price History Modal
   const [priceHistoryItem, setPriceHistoryItem] = useState<Item | null>(null);
   const [priceHistoryData, setPriceHistoryData] = useState<any[]>([]);
@@ -215,6 +222,68 @@ export default function ItemsPage() {
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleUploadExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const formData = new FormData();
+    formData.append('file', file);
+    setToastInfo({ show: true, msg: 'Membaca file Excel...', type: 'info' });
+    try {
+      const res = await fetch('/api/master-data/items/template/preview', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setImportPreviewData(data.data || []);
+        setImportSummary(data.summary || null);
+        setIsImportModalOpen(true);
+        setToastInfo((prev) => ({ ...prev, show: false }));
+      } else {
+        setToastInfo({ show: true, msg: data.error || 'Gagal membaca file', type: 'error' });
+      }
+    } catch (err: unknown) {
+      setToastInfo({
+        show: true,
+        msg: err instanceof Error ? err.message : 'Error uploading file',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (importPreviewData.length === 0 || !importSummary) return;
+    if (importSummary.error > 0) {
+      setToastInfo({ show: true, msg: 'Masih ada data error, harap perbaiki file terlebih dahulu', type: 'error' });
+      return;
+    }
+    setImportingStatus(true);
+    try {
+      const res = await fetch('/api/master-data/items/template/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: importPreviewData }),
+      });
+      const resData = await res.json();
+      if (res.ok) {
+        setToastInfo({ show: true, msg: 'Berhasil mengimpor data barang', type: 'success' });
+        setIsImportModalOpen(false);
+        fetchItems();
+      } else {
+        setToastInfo({ show: true, msg: resData.error || 'Gagal import data', type: 'error' });
+      }
+    } catch (err: unknown) {
+      setToastInfo({
+        show: true,
+        msg: err instanceof Error ? err.message : 'Error importing data',
+        type: 'error',
+      });
+    } finally {
+      setImportingStatus(false);
+    }
+  };
 
   // Auto-fill and lock Reporting Unit when has_brands is true
   useEffect(() => {
@@ -558,10 +627,33 @@ export default function ItemsPage() {
                 </button>
               )}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               {selectedItems.length > 0 && (
                 <Button variant="outline" size="sm" onClick={() => { setBulkForm({ is_global: true, venue_ids: [] }); setShowBulkModal(true); }} style={{ height: 34 }}>Edit Venue Massal ({selectedItems.length})</Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open('/api/master-data/items/template/download', '_blank')}
+                style={{ height: 34 }}
+              >
+                <Download size={14} style={{ marginRight: 4 }} /> Download Template
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                style={{ height: 34 }}
+              >
+                <Upload size={14} style={{ marginRight: 4 }} /> Upload Excel
+              </Button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".xlsx"
+                style={{ display: 'none' }}
+                onChange={handleUploadExcel}
+              />
               <Button variant="primary" size="sm" onClick={openAdd} style={{ height: 34 }}>+ Tambah Barang</Button>
             </div>
           </div>
@@ -1246,6 +1338,91 @@ export default function ItemsPage() {
                 </Table>
               </div>
             )}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} title="Preview Import Barang" maxWidth={1000}>
+        <div style={{ padding: 20 }}>
+          {importSummary && (
+            <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ padding: 12, borderRadius: 8, background: importSummary.error > 0 ? '#fef2f2' : '#f0fdf4', border: `1px solid ${importSummary.error > 0 ? '#fecaca' : '#bbf7d0'}` }}>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div><strong>Total Baris:</strong> {importSummary.total}</div>
+                  <div style={{ color: '#0ea5e9' }}><strong>Insert:</strong> {importSummary.insert}</div>
+                  <div style={{ color: '#f59e0b' }}><strong>Update:</strong> {importSummary.update}</div>
+                  <div style={{ color: '#15803d' }}><strong>Valid:</strong> {importSummary.valid}</div>
+                  <div style={{ color: '#b91c1c' }}><strong>Error:</strong> {importSummary.error}</div>
+                </div>
+                {importSummary.error > 0 && (
+                  <div style={{ marginTop: 8, fontSize: 13, color: '#b91c1c' }}>
+                    Masih terdapat error pada baris data. Harap perbaiki file Excel Anda dan upload kembali.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <Button variant="outline" onClick={() => setIsImportModalOpen(false)}>Batal</Button>
+                <Button
+                  variant="primary"
+                  onClick={handleConfirmImport}
+                  disabled={!importSummary || importSummary.error > 0 || importingStatus}
+                >
+                  {importingStatus ? 'Menyimpan...' : 'Proses Import'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ maxHeight: 400, overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+            <Table>
+              <thead>
+                <tr>
+                  <th style={{ width: 60, textAlign: 'center' }}>Baris</th>
+                  <th style={{ width: 80, textAlign: 'center' }}>Aksi</th>
+                  <th>Barang</th>
+                  <th>Kategori / Satuan</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreviewData.map((row, i) => (
+                  <tr key={`import-${row.row_index ?? i}`} style={{ background: row.isValid ? 'transparent' : '#fef2f2' }}>
+                    <td style={{ textAlign: 'center' }}>{row.row_index}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      {row.action === 'INSERT' ? (
+                        <span style={{ padding: '2px 6px', background: '#e0f2fe', color: '#0369a1', borderRadius: 4, fontSize: 11, fontWeight: 500 }}>NEW</span>
+                      ) : (
+                        <span style={{ padding: '2px 6px', background: '#fef3c7', color: '#b45309', borderRadius: 4, fontSize: 11, fontWeight: 500 }}>UPDATE</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="font-bold">{row.name}</div>
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        {row.barcode || '(barcode otomatis)'} {row.item_id ? `| ID: ${row.item_id}` : ''}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ fontSize: 12 }}>{row.category_name || '-'}</div>
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        {row.purchase_unit} → {row.smallest_unit} (x{row.conversion_ratio})
+                      </div>
+                    </td>
+                    <td>
+                      {row.isValid ? (
+                        <span style={{ color: '#15803d', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                          <CheckCircle2 size={14} /> Valid
+                        </span>
+                      ) : (
+                        <span style={{ color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                          <XCircle size={14} /> {row.errorMessage}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
           </div>
         </div>
       </Modal>

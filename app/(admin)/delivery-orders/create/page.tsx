@@ -329,7 +329,8 @@ export default function CreateDeliveryOrderPage() {
       return;
     }
 
-    if (!form.driver_name.trim()) {
+    const driverName = (driverNameRef.current?.value || form.driver_name || '').trim();
+    if (!driverName) {
       setError('Nama sopir/pengirim wajib diisi.');
       return;
     }
@@ -368,20 +369,20 @@ export default function CreateDeliveryOrderPage() {
         return;
       }
       
-      await executeSave(selectedItems);
+      await executeSave(selectedItems, driverName);
     } catch (err: unknown) {
       setError((err instanceof Error ? err.message : 'Unknown error'));
       setSaving(false);
     }
   };
 
-  const executeSave = async (selectedItems: any[]) => {
+  const executeSave = async (selectedItems: any[], driverNameOverride?: string) => {
     setSaving(true);
     try {
       const payload = {
         order_id: selectedOrderId === 'DIRECT' ? null : Number(selectedOrderId),
         outlet_id: Number(targetOutletId),
-        driver_name: driverNameRef.current?.value || form.driver_name || '',
+        driver_name: (driverNameOverride || driverNameRef.current?.value || form.driver_name || '').trim(),
         delivery_date: form.delivery_date,
         items: selectedItems.map(i => ({
           order_item_id: i.order_item_id,
