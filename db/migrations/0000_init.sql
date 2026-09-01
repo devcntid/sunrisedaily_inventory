@@ -1251,3 +1251,15 @@ ALTER TABLE "public"."goods_receipts" ADD CONSTRAINT "goods_receipts_purchase_or
 ALTER TABLE "public"."goods_receipts" ADD CONSTRAINT "goods_receipts_received_by_fkey" FOREIGN KEY ("received_by") REFERENCES "public"."users"("id");
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_purchase_order_id_fkey" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_orders"("id") ON DELETE CASCADE;
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE RESTRICT;
+
+CREATE TABLE IF NOT EXISTS "public"."inventory_batches" (
+    "id" int8 NOT NULL DEFAULT nextval('inventory_batches_id_seq'::regclass),
+    "item_id" int8 NOT NULL REFERENCES "public"."items"("id") ON DELETE CASCADE,
+    "goods_receipt_id" int8 REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL,
+    "batch_number" varchar(100),
+    "expired_date" date NOT NULL,
+    "qty_received" numeric(12,2) NOT NULL,
+    "qty_remaining" numeric(12,2) NOT NULL,
+    "created_at" timestamptz DEFAULT now(),
+    PRIMARY KEY ("id")
+);

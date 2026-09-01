@@ -20,13 +20,12 @@ export default function UsersManagementPage() {
     name: '',
     email: '',
     role: 'ADMIN_OUTLET',
-    outlet_id: '',
-    password: ''
+    outlet_id: ''
   });
 
   function openAddUser() {
     setEditingUserId(null);
-    setFormData({ name: '', email: '', role: 'ADMIN_OUTLET', outlet_id: '', password: '' });
+    setFormData({ name: '', email: '', role: 'ADMIN_OUTLET', outlet_id: '' });
     setModalOpen(true);
   }
 
@@ -36,8 +35,7 @@ export default function UsersManagementPage() {
       name: user.name || '',
       email: user.email || '',
       role: user.role || 'ADMIN_OUTLET',
-      outlet_id: user.outlet_id ? String(user.outlet_id) : '',
-      password: '' // empty initially when editing
+      outlet_id: user.outlet_id ? String(user.outlet_id) : ''
     });
     setModalOpen(true);
   }
@@ -80,15 +78,14 @@ export default function UsersManagementPage() {
           name: formData.name,
           email: formData.email,
           role: formData.role,
-          outlet_id: formData.outlet_id ? parseInt(formData.outlet_id) : null,
-          ...(formData.password && formData.role === 'ADMIN_OUTLET' ? { password: formData.password } : {})
+          outlet_id: formData.outlet_id ? parseInt(formData.outlet_id) : null
         })
       });
       const data = await res.json();
       if (data.success) {
         setToast({ open: true, message: data.message, type: 'success' });
         setModalOpen(false);
-        setFormData({ name: '', email: '', role: 'ADMIN_OUTLET', outlet_id: '', password: '' });
+        setFormData({ name: '', email: '', role: 'ADMIN_OUTLET', outlet_id: '' });
         fetchUsers();
       } else {
         setToast({ open: true, message: data.message || 'Gagal menyimpan pengguna', type: 'error' });
@@ -159,7 +156,7 @@ export default function UsersManagementPage() {
             <div className="alert-banner alert-info" style={{ fontSize: '13px', marginBottom: 20, alignItems: 'flex-start' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginTop: 2 }}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
               <div>
-                Super Admin (Pusat) login menggunakan <strong>Google SSO</strong> (tanpa kata sandi). Admin Outlet dapat masuk menggunakan Kata Sandi.
+                Seluruh pengguna (Super Admin Pusat & Admin Outlet) masuk menggunakan <strong>Google SSO</strong> dengan alamat Email Google yang terdaftar.
               </div>
             </div>
             
@@ -169,18 +166,9 @@ export default function UsersManagementPage() {
             </div>
             
             <div className="form-group" style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 500, color: '#475569', marginBottom: 6, display: 'block' }}>Alamat Email</label>
-              <Input type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+              <label style={{ fontSize: 13, fontWeight: 500, color: '#475569', marginBottom: 6, display: 'block' }}>Alamat Email Google</label>
+              <Input type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} placeholder="contoh: user@gmail.com" />
             </div>
-
-            {formData.role === 'ADMIN_OUTLET' && (
-              <div className="form-group" style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 13, fontWeight: 500, color: '#475569', marginBottom: 6, display: 'block' }}>
-                  Kata Sandi {editingUserId && <span className="muted" style={{ fontWeight: 400 }}>(Kosongkan jika tidak ingin diubah)</span>}
-                </label>
-                <Input type="password" required={!editingUserId} value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder={editingUserId ? "Kosongkan jika tidak diubah" : "Masukkan kata sandi"} />
-              </div>
-            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: formData.role === 'ADMIN_OUTLET' ? '1fr 1fr' : '1fr', gap: 16 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>

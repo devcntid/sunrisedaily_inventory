@@ -10,7 +10,7 @@ import { Select } from '@/components/ui/Select';
 import { Toast } from '@/components/ui/Toast';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { RefreshCcw, Search, Info, Calendar, DollarSign, Package, Download, Zap, Loader2, Bell, Store, AlertCircle, X, ExternalLink } from 'lucide-react';
+import { RefreshCcw, Search, Info, Calendar, DollarSign, Package, Download, Zap, Loader2, Bell, Store, AlertCircle, X, ExternalLink, Clock, AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { CombinedStockView } from './CombinedStockView';
 import { DistributionHistoryView } from './DistributionHistoryView';
 
@@ -22,7 +22,7 @@ interface Outlet {
   last_sales_sync?: string | null;
 }
 interface Category { id: number; name: string; }
-interface Item { id: number; name: string; sku: string; category_id: number; minimum_threshold: number; smallest_unit: string; central_stock: number; conversion_ratio: number; purchase_unit?: string; }
+interface Item { id: number; name: string; sku: string; category_id: number; minimum_threshold: number; smallest_unit: string; central_stock: number; conversion_ratio: number; purchase_unit?: string; expired_date?: string | null; }
 interface ConsumedMaterial {
   item_id: number;
   item_name: string;
@@ -285,6 +285,87 @@ export default function StockMonitoringPage() {
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
+
+  // Batch Manager Modal State
+  const [batchModalItem, setBatchModalItem] = useState<any | null>(null);
+  const [batchList, setBatchList] = useState<any[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [newBatchDate, setNewBatchDate] = useState('');
+  const [newBatchQty, setNewBatchQty] = useState('');
+  const [savingBatch, setSavingBatch] = useState(false);
+
+  const fetchItemBatches = async (itemId: number) => {
+    setLoadingBatches(true);
+    try {
+      const res = await fetch(`/api/inventory-batches?item_id=${itemId}`);
+      const json = await res.json();
+      if (json.success) {
+        setBatchList(json.data ?? []);
+      }
+    } catch (err) {
+      console.error('Error fetching batches:', err);
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
+  const openBatchModal = (item: any) => {
+    setBatchModalItem(item);
+    setNewBatchDate('');
+    setNewBatchQty('');
+    fetchItemBatches(item.id);
+  };
+
+  const handleAddBatch = async () => {
+    if (!batchModalItem || !newBatchDate || !newBatchQty) {
+      alert('Tanggal Kadaluarsa dan Qty wajib diisi');
+      return;
+    }
+    setSavingBatch(true);
+    try {
+      const ratio = Number(batchModalItem.conversion_ratio) || 1;
+      const qtyInSmallest = Number(newBatchQty) * ratio;
+
+      const res = await fetch('/api/inventory-batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: batchModalItem.id,
+          expired_date: newBatchDate,
+          qty_received: qtyInSmallest,
+          qty_remaining: qtyInSmallest,
+          batch_number: `BATCH-MANUAL-${Date.now()}`
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNewBatchDate('');
+        setNewBatchQty('');
+        await fetchItemBatches(batchModalItem.id);
+        fetchData();
+      } else {
+        alert(json.message || 'Gagal menyimpan batch');
+      }
+    } catch (err) {
+      console.error('Error adding batch:', err);
+    } finally {
+      setSavingBatch(false);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: number) => {
+    if (!confirm('Hapus batch kadaluarsa ini?')) return;
+    try {
+      const res = await fetch(`/api/inventory-batches?id=${batchId}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success && batchModalItem) {
+        await fetchItemBatches(batchModalItem.id);
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Error deleting batch:', err);
+    }
+  };
 
   const formatUnit = (unit: string) => {
     if (!unit) return '';
@@ -665,7 +746,10 @@ export default function StockMonitoringPage() {
                         <th rowSpan={3} style={{ width: 180, minWidth: 180, maxWidth: 180, verticalAlign: 'middle', background: '#ffffff', borderBottom: '2px solid #e2e8f0', borderRight: '1px solid #e2e8f0', position: 'sticky', left: 0, zIndex: 20 }}>
                           Bahan / Produk
                         </th>
-                        <th rowSpan={3} className="center" style={{ width: 120, minWidth: 120, maxWidth: 120, background: '#f8fafc', borderBottom: '2px solid #cbd5e1', borderRight: '2px solid #cbd5e1', fontWeight: 700, padding: '0 16px', position: 'sticky', left: 180, zIndex: 20, boxShadow: '2px 0 5px -2px rgba(0,0,0,0.1)' }}>
+                        <th rowSpan={3} className="center" style={{ width: 140, minWidth: 140, maxWidth: 140, verticalAlign: 'middle', background: '#ffffff', borderBottom: '2px solid #e2e8f0', borderRight: '1px solid #e2e8f0', position: 'sticky', left: 180, zIndex: 20 }}>
+                          Expired Date
+                        </th>
+                        <th rowSpan={3} className="center" style={{ width: 120, minWidth: 120, maxWidth: 120, background: '#f8fafc', borderBottom: '2px solid #cbd5e1', borderRight: '2px solid #cbd5e1', fontWeight: 700, padding: '0 16px', position: 'sticky', left: 320, zIndex: 20, boxShadow: '2px 0 5px -2px rgba(0,0,0,0.1)' }}>
                           Gudang Pusat
                         </th>
                         {visibleOutlets.map(outlet => {
@@ -719,14 +803,39 @@ export default function StockMonitoringPage() {
                       ) : (
                         paginatedItems?.map(item => {
                           const ratio = Number(item.conversion_ratio) || 1;
-                          return (
-                            <tr key={item.id} className="hover-row">
-                              <td style={{ width: 180, minWidth: 180, maxWidth: 180, fontWeight: 600, borderRight: '1px solid #f1f5f9', background: '#ffffff', position: 'sticky', left: 0, zIndex: 10, whiteSpace: 'normal', wordWrap: 'break-word' }}>
-                                {item.name}
-                              </td>
+                            const getExpBadge = (expStr?: string | null) => {
+                              if (!expStr) return null;
+                              const exp = new Date(expStr);
+                              const now = new Date();
+                              exp.setHours(0,0,0,0);
+                              now.setHours(0,0,0,0);
+                              const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                              const formatted = exp.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+                              if (diffDays <= 0) return <span style={{ fontSize: 10, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{formatted}</span>;
+                              if (diffDays <= 30) return <span style={{ fontSize: 10, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{formatted}</span>;
+                              return <span style={{ fontSize: 10, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>{formatted}</span>;
+                            };
+
+                             return (
+                              <tr key={item.id} className="hover-row">
+                                <td style={{ width: 180, minWidth: 180, maxWidth: 180, fontWeight: 600, borderRight: '1px solid #f1f5f9', background: '#ffffff', position: 'sticky', left: 0, zIndex: 10, whiteSpace: 'normal', wordWrap: 'break-word', padding: '8px 12px' }}>
+                                  {item.name}
+                                </td>
+                                <td className="center" style={{ width: 140, minWidth: 140, maxWidth: 140, borderRight: '1px solid #f1f5f9', background: '#ffffff', position: 'sticky', left: 180, zIndex: 10, padding: '8px 6px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                    {getExpBadge(item.expired_date) || <span style={{ color: '#94a3b8', fontSize: 11 }}>-</span>}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openBatchModal(item); }}
+                                      title="Kelola / Set Expired Date"
+                                      style={{ border: 'none', background: '#f1f5f9', color: '#475569', borderRadius: 4, padding: '3px 5px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
+                                    >
+                                      <Calendar size={12} />
+                                    </button>
+                                  </div>
+                                </td>
 
                               {/* Gudang Pusat */}
-                              <td className="right" style={{ width: 120, minWidth: 120, maxWidth: 120, padding: '8px 12px', background: '#f8fafc', borderRight: '2px solid #cbd5e1', whiteSpace: 'nowrap', position: 'sticky', left: 180, zIndex: 10, boxShadow: '2px 0 5px -2px rgba(0,0,0,0.1)' }}>
+                              <td className="right" style={{ width: 120, minWidth: 120, maxWidth: 120, padding: '8px 12px', background: '#f8fafc', borderRight: '2px solid #cbd5e1', whiteSpace: 'nowrap', position: 'sticky', left: 320, zIndex: 10, boxShadow: '2px 0 5px -2px rgba(0,0,0,0.1)' }}>
                                 {Number(item.central_stock) <= 0 ? (
                                   <span style={{ color: '#ef4444', fontWeight: 600 }}>Kosong</span>
                                 ) : (
@@ -1073,6 +1182,102 @@ export default function StockMonitoringPage() {
           onCancel={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
           loading={transferring}
         />
+
+        <Modal
+          isOpen={!!batchModalItem}
+          onClose={() => setBatchModalItem(null)}
+          title={`Kelola Batch / Expired Date: ${batchModalItem?.name || ''}`}
+        >
+          <div style={{ padding: 16 }}>
+            <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 6, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>INFORMASI STOK GUDANG PUSAT</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                Sisa Stok Saat Ini: {((Number(batchModalItem?.central_stock || 0)) / (Number(batchModalItem?.conversion_ratio) || 1)).toLocaleString('id-ID')} {batchModalItem?.purchase_unit || batchModalItem?.smallest_unit}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Daftar Batch Expired Active</h4>
+              {loadingBatches ? (
+                <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center', padding: 12 }}>Memuat batch...</div>
+              ) : batchList.length === 0 ? (
+                <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', textAlign: 'center', padding: 12, background: '#fafafa', borderRadius: 4 }}>
+                  Belum ada batch kadaluarsa terdaftar untuk barang ini.
+                </div>
+              ) : (
+                <table className="data-table" style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f1f5f9' }}>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>No. Batch</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'left' }}>Expired Date</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>Sisa Qty</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'center', width: 50 }}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchList.map(b => (
+                      <tr key={b.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{b.batch_number || '-'}</td>
+                        <td style={{ padding: '6px 8px', fontWeight: 600, color: '#0f172a' }}>
+                          {new Date(b.expired_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          {(Number(b.qty_remaining) / (Number(batchModalItem?.conversion_ratio) || 1)).toLocaleString('id-ID')} {batchModalItem?.purchase_unit || batchModalItem?.smallest_unit}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                          <button
+                            onClick={() => handleDeleteBatch(b.id)}
+                            style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer' }}
+                            title="Hapus Batch Ini"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 16, marginTop: 16 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 10 }}>+ Tambah Expired Date Stok Lama</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Expired Date (Tgl Kadaluarsa)</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={newBatchDate}
+                    onChange={e => setNewBatchDate(e.target.value)}
+                    style={{ width: '100%', fontSize: 12, padding: '4px 8px' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }}>
+                    Qty Stok ({batchModalItem?.purchase_unit || batchModalItem?.smallest_unit})
+                  </label>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="0"
+                    value={newBatchQty}
+                    onChange={e => setNewBatchQty(e.target.value)}
+                    style={{ width: '100%', fontSize: 12, padding: '4px 8px' }}
+                  />
+                </div>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleAddBatch}
+                disabled={savingBatch}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12 }}
+              >
+                <Plus size={14} /> {savingBatch ? 'Menyimpan...' : 'Simpan Batch Expired Date'}
+              </button>
+            </div>
+          </div>
+        </Modal>
 
       </div>
     </section>

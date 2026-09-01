@@ -122,11 +122,12 @@ export async function createItem(data: {
   parent_id?: number | null;
   is_global?: boolean;
   venue_ids?: number[];
+  expired_date?: string | null;
 }) {
   return withTransaction(async (client) => {
     const result = await client.query<Item>(
-      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global, expired_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        RETURNING *`,
       [
         data.name, data.category_id, data.purchase_unit, data.smallest_unit, data.conversion_ratio,
@@ -137,7 +138,8 @@ export async function createItem(data: {
         data.min_order_qty ?? 1,
         data.order_multiple ?? 1,
         data.parent_id ?? null,
-        data.is_global ?? true
+        data.is_global ?? true,
+        data.expired_date || null
       ]
     );
     const item = result.rows[0];

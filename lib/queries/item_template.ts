@@ -146,7 +146,21 @@ export async function buildItemPreviewRows(rawData: Record<string, unknown>[]): 
       item_id = Number(row.id_barang);
     }
 
-    const name = String(row.nama_barang ?? '').trim();
+    const baseName = String(row.nama_barang ?? '').trim();
+    const merk = String(row.merk ?? row.merek ?? '').trim();
+    const spec = String(row.spec ?? row.spesifikasi ?? '').trim();
+
+    let name = String(row.ITEM ?? row.item ?? '').trim();
+    if (!name) {
+      if (baseName && (merk || spec)) {
+        const parts = [baseName];
+        if (merk && !baseName.toLowerCase().includes(merk.toLowerCase())) parts.push(merk);
+        if (spec && !baseName.toLowerCase().includes(spec.toLowerCase())) parts.push(spec);
+        name = parts.join(' ');
+      } else {
+        name = baseName;
+      }
+    }
     const categoryName = String(row.kategori ?? '').trim();
     const purchaseRaw = String(row.satuan_beli ?? '').trim();
     const smallestRaw = String(row.satuan_terkecil ?? '').trim();

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Table } from '@/components/ui/Table';
 import { Pagination } from '@/components/ui/Pagination';
-import { Search, Download } from 'lucide-react';
+import { Search, Download, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Select } from '@/components/ui/Select';
 
@@ -18,6 +18,7 @@ interface CombinedStock {
   central_stock: string;
   outlet_stock: string;
   current_average_price: string;
+  expired_date?: string | null;
   outlet_stocks_map: Record<string, string>;
 }
 
@@ -90,6 +91,7 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
       
       const row: Record<string, any> = {
         'Bahan / Produk': item.item_name,
+        'Expired Date Terdekat': item.expired_date ? new Date(item.expired_date).toLocaleDateString('id-ID') : '-',
         'Pusat': valPusat
       };
 
@@ -243,7 +245,8 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
                   <thead>
                     <tr>
                       <th rowSpan={2} style={{ padding: '8px 12px', fontSize: 11, width: 250, minWidth: 250, maxWidth: 250, position: 'sticky', left: 0, zIndex: 20, background: '#fff', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }}>Bahan / Produk</th>
-                      <th colSpan={2} className="center" style={{ padding: '8px 12px', fontSize: 11, position: 'sticky', left: 250, zIndex: 20, background: '#fff', whiteSpace: 'nowrap', textAlign: 'center', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>Pusat</th>
+                      <th rowSpan={2} style={{ padding: '8px 12px', fontSize: 11, width: 140, minWidth: 140, maxWidth: 140, position: 'sticky', left: 250, zIndex: 20, background: '#fff', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Expired Date</th>
+                      <th colSpan={2} className="center" style={{ padding: '8px 12px', fontSize: 11, position: 'sticky', left: 390, zIndex: 20, background: '#fff', whiteSpace: 'nowrap', textAlign: 'center', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>Pusat</th>
                       {outlets.map(o => (
                         <th key={o.id} colSpan={2} className="center" style={{ padding: '8px 12px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'center', borderLeft: '1px solid #e2e8f0' }}>{o.name}</th>
                       ))}
@@ -251,8 +254,8 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
                       <th colSpan={2} className="center" style={{ padding: '8px 12px', fontSize: 11, whiteSpace: 'nowrap', textAlign: 'center', borderLeft: '1px solid #e2e8f0' }}>Total Keseluruhan</th>
                     </tr>
                     <tr>
-                      <th className="right" style={{ padding: '6px 12px', fontSize: 10, width: 100, minWidth: 100, position: 'sticky', left: 250, zIndex: 20, background: '#fff', whiteSpace: 'nowrap' }}>Stok</th>
-                      <th className="right" style={{ padding: '6px 12px', fontSize: 10, width: 120, minWidth: 120, position: 'sticky', left: 350, zIndex: 20, background: '#fff', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>Nilai (Rp)</th>
+                      <th className="right" style={{ padding: '6px 12px', fontSize: 10, width: 100, minWidth: 100, position: 'sticky', left: 390, zIndex: 20, background: '#fff', whiteSpace: 'nowrap' }}>Stok</th>
+                      <th className="right" style={{ padding: '6px 12px', fontSize: 10, width: 120, minWidth: 120, position: 'sticky', left: 490, zIndex: 20, background: '#fff', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>Nilai (Rp)</th>
                       {outlets.map(o => (
                         <Fragment key={o.id}>
                           <th className="right" style={{ padding: '6px 12px', fontSize: 10, whiteSpace: 'nowrap', minWidth: 100, borderLeft: '1px solid #e2e8f0' }}>Stok</th>
@@ -307,11 +310,29 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
                         totalColor = '#ef4444'; // Minus
                       }
 
+                      const getExpBadge = (expStr?: string | null) => {
+                        if (!expStr) return null;
+                        const exp = new Date(expStr);
+                        const now = new Date();
+                        exp.setHours(0,0,0,0);
+                        now.setHours(0,0,0,0);
+                        const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                        const formatted = exp.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+                        if (diffDays <= 0) return <span style={{ fontSize: 10, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{formatted}</span>;
+                        if (diffDays <= 30) return <span style={{ fontSize: 10, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{formatted}</span>;
+                        return <span style={{ fontSize: 10, color: '#166534', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>{formatted}</span>;
+                      };
+
                       return (
                         <tr key={item.id}>
-                          <td className="font-bold" style={{ padding: '8px 12px', fontSize: 12, whiteSpace: 'normal', wordWrap: 'break-word', width: 250, minWidth: 250, maxWidth: 250, position: 'sticky', left: 0, zIndex: 10, background: '#fff', borderRight: '1px solid #e2e8f0' }}>{item.item_name}</td>
-                          <td className="right" style={{ padding: '8px 12px', position: 'sticky', left: 250, zIndex: 10, background: '#fff' }}>{fmt(central)}</td>
-                          <td className="right" style={{ padding: '8px 12px', position: 'sticky', left: 350, zIndex: 10, background: '#fff', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>{fmtRupiah(valPusat)}</td>
+                          <td className="font-bold" style={{ padding: '8px 12px', fontSize: 12, whiteSpace: 'normal', wordWrap: 'break-word', width: 250, minWidth: 250, maxWidth: 250, position: 'sticky', left: 0, zIndex: 10, background: '#fff', borderRight: '1px solid #e2e8f0' }}>
+                            {item.item_name}
+                          </td>
+                          <td className="center" style={{ padding: '8px 8px', width: 140, minWidth: 140, maxWidth: 140, position: 'sticky', left: 250, zIndex: 10, background: '#fff', borderRight: '1px solid #e2e8f0' }}>
+                            {getExpBadge(item.expired_date) || <span style={{ color: '#94a3b8', fontSize: 11 }}>-</span>}
+                          </td>
+                          <td className="right" style={{ padding: '8px 12px', position: 'sticky', left: 390, zIndex: 10, background: '#fff' }}>{fmt(central)}</td>
+                          <td className="right" style={{ padding: '8px 12px', position: 'sticky', left: 490, zIndex: 10, background: '#fff', borderRight: '1px solid #e2e8f0', boxShadow: '2px 0 4px -2px rgba(0,0,0,0.1)' }}>{fmtRupiah(valPusat)}</td>
                           
                           {outlets.map(o => {
                             const oStock = Number(item.outlet_stocks_map?.[o.id] || 0);
