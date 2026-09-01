@@ -87,7 +87,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
 
       setForm({
         name: data.recipe.name,
-        venue_id: String(data.recipe.venue_id),
+        venue_id: data.recipe.is_all_venues ? 'ALL' : String(data.recipe.venue_id),
         yield_amount: String(data.recipe.yield),
         yield_unit: data.recipe.yield_unit || '',
         x_factor_pct: String((Number(data.recipe.x_factor_pct) * 100).toFixed(0)),
@@ -217,7 +217,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
 
     const payload = {
       ...form,
-      venue_id: Number(form.venue_id),
+      venue_id: form.venue_id === 'ALL' ? 'ALL' : Number(form.venue_id),
       category_id: form.category_id ? Number(form.category_id) : undefined,
       yield_amount: Number(form.yield_amount),
       x_factor_pct: Number(form.x_factor_pct) / 100,
@@ -303,6 +303,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
                 <label className="form-label req">Lokasi (Venue)</label>
                 <select className="input" style={{ width: '100%', height: 34, fontSize: 12 }} value={form.venue_id} onChange={e => setForm(f => ({ ...f, venue_id: e.target.value }))}>
                   <option value="">Pilih...</option>
+                  <option value="ALL">Semua Venue</option>
                   {venues.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 </select>
               </div>

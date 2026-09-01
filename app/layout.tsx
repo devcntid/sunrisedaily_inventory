@@ -27,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
-      <body className={`${cabin.variable} ${albertSans.variable}`}>
+    <html lang="id" suppressHydrationWarning>
+      <body className={`${cabin.variable} ${albertSans.variable}`} suppressHydrationWarning>
         <Providers>
           {children}
         </Providers>

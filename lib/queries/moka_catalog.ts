@@ -103,10 +103,11 @@ export async function getOutletsWithBusiness() {
 export async function getRecipesForMapping() {
     const recipesRes = await query(`
         SELECT 
-            r.id, 
+            MIN(r.id)::int as id, 
             r.name,
-            (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = r.id) as ingredient_count
+            (SELECT COUNT(*)::int FROM recipe_ingredients ri WHERE ri.recipe_id = MIN(r.id)) as ingredient_count
         FROM recipes r
+        GROUP BY r.name
         ORDER BY r.name ASC
     `);
     return recipesRes.rows;
