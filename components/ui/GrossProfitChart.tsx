@@ -2,15 +2,9 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export function GrossProfitChart({ data }: { data: { outletName: string, revenue: number, cogs: number, marginPct: number }[] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="empty-state" style={{ padding: '32px 0' }}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18M18 17l-5-5-4 4-5-5"/></svg>
-        <h4>Data tidak tersedia</h4>
-        <p>Belum ada data penjualan 7 hari terakhir</p>
-      </div>
-    );
-  }
+  const chartData = data && data.length > 0 ? data : [
+    { outletName: 'Semua Outlet', revenue: 0, cogs: 0, marginPct: 0 }
+  ];
 
   const formatRupiah = (val: number) => `Rp ${(val / 1000000).toFixed(1)}M`;
 
@@ -18,7 +12,7 @@ export function GrossProfitChart({ data }: { data: { outletName: string, revenue
     <>
       <div style={{ height: 300, width: '100%', marginTop: 24, outline: 'none' }} tabIndex={-1}>
         <ResponsiveContainer width="100%" height="100%" style={{ outline: 'none' }}>
-          <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }} tabIndex={-1}>
+          <BarChart data={chartData} margin={{ top: 20, right: 10, left: 0, bottom: 20 }} style={{ outline: 'none' }} tabIndex={-1}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="outletName" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} dy={10} />
             <YAxis 

@@ -1,14 +1,37 @@
 import { query } from '@/lib/db';
 
-export async function getDashboardStats(role: string, outletId: number | null) {
+export async function getDashboardStats(
+  role: string,
+  outletId: number | null,
+  startDate?: string,
+  endDate?: string
+) {
   try {
+    const hasDateRange = Boolean(startDate && endDate);
+
+    let ordersQuery = '';
+    let ordersParams: unknown[] = [];
+
+    if (hasDateRange) {
+      if (role === 'ADMIN_PUSAT') {
+        ordersQuery = `SELECT status, COUNT(*)::int AS cnt FROM orders WHERE created_at >= $1::date AND created_at < ($2::date + INTERVAL '1 day') GROUP BY status`;
+        ordersParams = [startDate, endDate];
+      } else {
+        ordersQuery = `SELECT status, COUNT(*)::int AS cnt FROM orders WHERE outlet_id = $1 AND created_at >= $2::date AND created_at < ($3::date + INTERVAL '1 day') GROUP BY status`;
+        ordersParams = [outletId, startDate, endDate];
+      }
+    } else {
+      if (role === 'ADMIN_PUSAT') {
+        ordersQuery = `SELECT status, COUNT(*)::int AS cnt FROM orders GROUP BY status`;
+        ordersParams = [];
+      } else {
+        ordersQuery = `SELECT status, COUNT(*)::int AS cnt FROM orders WHERE outlet_id = $1 GROUP BY status`;
+        ordersParams = [outletId];
+      }
+    }
+
     const [ordersRes, poRes, itemsRes, alertsRes, stockValRes] = await Promise.all([
-      query(
-        role === 'ADMIN_PUSAT'
-          ? `SELECT status, COUNT(*)::int AS cnt FROM orders GROUP BY status`
-          : `SELECT status, COUNT(*)::int AS cnt FROM orders WHERE outlet_id = $1 GROUP BY status`,
-        role === 'ADMIN_PUSAT' ? [] : [outletId]
-      ),
+      query(ordersQuery, ordersParams),
       role === 'ADMIN_PUSAT' 
         ? query(`SELECT COUNT(*)::int AS cnt FROM purchase_orders WHERE status IN ('RFQ', 'RFQ_TERKIRIM')`) 
         : Promise.resolve({ rows: [{ cnt: 0 }] }),
@@ -37,23 +60,56 @@ export async function getDashboardStats(role: string, outletId: number | null) {
   }
 }
 
-export async function getRecentOrders(role: string, outletId: number | null) {
+export async function getRecentOrders(
+  role: string,
+  outletId: number | null,
+  startDate?: string,
+  endDate?: string
+) {
   try {
-    const result = await query(
-      role === 'ADMIN_PUSAT'
-        ? `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
-           FROM orders o
-           LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
-           LEFT JOIN users u ON u.id = o.created_by
-           ORDER BY o.created_at DESC LIMIT 5`
-        : `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
-           FROM orders o
-           LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
-           LEFT JOIN users u ON u.id = o.created_by
-           WHERE o.outlet_id = $1
-           ORDER BY o.created_at DESC LIMIT 5`,
-      role === 'ADMIN_PUSAT' ? [] : [outletId]
-    );
+    const hasDateRange = Boolean(startDate && endDate);
+
+    let sql = '';
+    let params: unknown[] = [];
+
+    if (hasDateRange) {
+      if (role === 'ADMIN_PUSAT') {
+        sql = `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
+               FROM orders o
+               LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
+               LEFT JOIN users u ON u.id = o.created_by
+               WHERE o.created_at >= $1::date AND o.created_at < ($2::date + INTERVAL '1 day')
+               ORDER BY o.created_at DESC LIMIT 10`;
+        params = [startDate, endDate];
+      } else {
+        sql = `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
+               FROM orders o
+               LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
+               LEFT JOIN users u ON u.id = o.created_by
+               WHERE o.outlet_id = $1 AND o.created_at >= $2::date AND o.created_at < ($3::date + INTERVAL '1 day')
+               ORDER BY o.created_at DESC LIMIT 10`;
+        params = [outletId, startDate, endDate];
+      }
+    } else {
+      if (role === 'ADMIN_PUSAT') {
+        sql = `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
+               FROM orders o
+               LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
+               LEFT JOIN users u ON u.id = o.created_by
+               ORDER BY o.created_at DESC LIMIT 5`;
+        params = [];
+      } else {
+        sql = `SELECT o.id, o.status, o.order_date, o.delivery_date, outlet.name AS outlet_name, u.name AS created_by_name
+               FROM orders o
+               LEFT JOIN outlets outlet ON outlet.id = o.outlet_id
+               LEFT JOIN users u ON u.id = o.created_by
+               WHERE o.outlet_id = $1
+               ORDER BY o.created_at DESC LIMIT 5`;
+        params = [outletId];
+      }
+    }
+
+    const result = await query(sql, params);
     return result.rows;
   } catch { return []; }
 }
@@ -85,34 +141,73 @@ export async function getIncomingPOs() {
   } catch { return []; }
 }
 
-export async function getFastMovingItems() {
+export async function getFastMovingItems(startDate?: string, endDate?: string) {
   try {
-    const result = await query(
-      `SELECT i.name, i.smallest_unit, SUM(ABS(il.qty_change)) as total_out
-       FROM inventory_logs il
-       JOIN items i ON i.id = il.item_id
-       WHERE il.movement_type = 'OUT' AND il.created_at >= CURRENT_DATE - INTERVAL '7 days'
-       GROUP BY i.id, i.name, i.smallest_unit
-       ORDER BY total_out DESC
-       LIMIT 5`
-    );
+    const hasDateRange = Boolean(startDate && endDate);
+    let sql = '';
+    let params: unknown[] = [];
+
+    if (hasDateRange) {
+      sql = `SELECT i.name, i.smallest_unit, SUM(ABS(il.qty_change)) as total_out
+             FROM inventory_logs il
+             JOIN items i ON i.id = il.item_id
+             WHERE il.movement_type = 'OUT' AND il.created_at >= $1::date AND il.created_at < ($2::date + INTERVAL '1 day')
+             GROUP BY i.id, i.name, i.smallest_unit
+             ORDER BY total_out DESC
+             LIMIT 5`;
+      params = [startDate, endDate];
+    } else {
+      sql = `SELECT i.name, i.smallest_unit, SUM(ABS(il.qty_change)) as total_out
+             FROM inventory_logs il
+             JOIN items i ON i.id = il.item_id
+             WHERE il.movement_type = 'OUT' AND il.created_at >= CURRENT_DATE - INTERVAL '7 days'
+             GROUP BY i.id, i.name, i.smallest_unit
+             ORDER BY total_out DESC
+             LIMIT 5`;
+      params = [];
+    }
+
+    const result = await query(sql, params);
     return result.rows;
   } catch { return []; }
 }
 
-export async function getGrossProfitAnalytics() {
+export async function getGrossProfitAnalytics(startDate?: string, endDate?: string) {
   try {
-    const result = await query(
-      `SELECT 
-         o.name AS outlet_name,
-         SUM(mis.gross_sales) AS revenue,
-         SUM(mis.cogs) AS cogs
-       FROM moka_item_sales mis
-       JOIN outlets o ON o.id = mis.outlet_id
-       WHERE mis.period_start >= CURRENT_DATE - INTERVAL '7 days'
-       GROUP BY o.id, o.name
-       ORDER BY revenue DESC`
-    );
+    const hasDateRange = Boolean(startDate && endDate);
+    let sql = '';
+    let params: unknown[] = [];
+
+    if (hasDateRange) {
+      sql = `SELECT 
+               o.name AS outlet_name,
+               COALESCE(SUM(mis.gross_sales), 0) AS revenue,
+               COALESCE(SUM(mis.cogs), 0) AS cogs
+             FROM outlets o
+             LEFT JOIN moka_item_sales mis 
+               ON mis.outlet_id = o.id 
+               AND mis.period_start >= $1::date 
+               AND mis.period_start <= $2::date
+             WHERE o.is_active = TRUE AND o.type = 'STORE'
+             GROUP BY o.id, o.name
+             ORDER BY revenue DESC, o.name ASC`;
+      params = [startDate, endDate];
+    } else {
+      sql = `SELECT 
+               o.name AS outlet_name,
+               COALESCE(SUM(mis.gross_sales), 0) AS revenue,
+               COALESCE(SUM(mis.cogs), 0) AS cogs
+             FROM outlets o
+             LEFT JOIN moka_item_sales mis 
+               ON mis.outlet_id = o.id 
+               AND mis.period_start >= CURRENT_DATE - INTERVAL '7 days'
+             WHERE o.is_active = TRUE AND o.type = 'STORE'
+             GROUP BY o.id, o.name
+             ORDER BY revenue DESC, o.name ASC`;
+      params = [];
+    }
+
+    const result = await query(sql, params);
     return result.rows.map(row => {
       const revenue = parseFloat(row.revenue ?? '0');
       const cogs = parseFloat(row.cogs ?? '0');
@@ -174,25 +269,47 @@ export async function getOutletLowStock(outletId: number | null) {
   } catch { return []; }
 }
 
-export async function getOutletOrderTrend(outletId: number | null) {
+export async function getOutletOrderTrend(outletId: number | null, startDate?: string, endDate?: string) {
   if (!outletId) return [];
   try {
-    const result = await query(
-      `WITH dates AS (
-         SELECT generate_series(
-           CURRENT_DATE - INTERVAL '6 days', 
-           CURRENT_DATE, 
-           '1 day'::interval
-         )::date AS dt
-       )
-       SELECT to_char(d.dt, 'DD Mon') as labelDate, 
-              COALESCE(COUNT(o.id), 0)::int as count
-       FROM dates d
-       LEFT JOIN orders o ON DATE(o.created_at) = d.dt AND o.outlet_id = $1
-       GROUP BY d.dt
-       ORDER BY d.dt ASC`,
-      [outletId]
-    );
+    const hasDateRange = Boolean(startDate && endDate);
+    let sql = '';
+    let params: unknown[] = [];
+
+    if (hasDateRange) {
+      sql = `WITH dates AS (
+               SELECT generate_series(
+                 $2::date, 
+                 $3::date, 
+                 '1 day'::interval
+               )::date AS dt
+             )
+             SELECT to_char(d.dt, 'DD Mon') as labelDate, 
+                    COALESCE(COUNT(o.id), 0)::int as count
+             FROM dates d
+             LEFT JOIN orders o ON DATE(o.created_at) = d.dt AND o.outlet_id = $1
+             GROUP BY d.dt
+             ORDER BY d.dt ASC`;
+      params = [outletId, startDate, endDate];
+    } else {
+      sql = `WITH dates AS (
+               SELECT generate_series(
+                 CURRENT_DATE - INTERVAL '6 days', 
+                 CURRENT_DATE, 
+                 '1 day'::interval
+               )::date AS dt
+             )
+             SELECT to_char(d.dt, 'DD Mon') as labelDate, 
+                    COALESCE(COUNT(o.id), 0)::int as count
+             FROM dates d
+             LEFT JOIN orders o ON DATE(o.created_at) = d.dt AND o.outlet_id = $1
+             GROUP BY d.dt
+             ORDER BY d.dt ASC`;
+      params = [outletId];
+    }
+
+    const result = await query(sql, params);
     return result.rows.map(r => ({ labelDate: r.labeldate, value: r.count }));
   } catch { return []; }
 }
+

@@ -10,6 +10,7 @@ import TableRowLink from '@/components/shared/TableRowLink';
 import { DashboardChart } from '@/components/ui/DashboardChart';
 import { GrossProfitChart } from '@/components/ui/GrossProfitChart';
 import { OutletTrendChart } from '@/components/ui/OutletTrendChart';
+import DashboardDateFilter from '@/components/shared/DashboardDateFilter';
 
 import { 
   getDashboardStats, 
@@ -36,17 +37,41 @@ function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await getSession();
   if (!session) redirect('/login');
 
+  const resolvedParams = searchParams ? await searchParams : {};
+  const preset = typeof resolvedParams.preset === 'string' ? resolvedParams.preset : '7d';
+  let startDate = typeof resolvedParams.startDate === 'string' ? resolvedParams.startDate : '';
+  let endDate = typeof resolvedParams.endDate === 'string' ? resolvedParams.endDate : '';
+
+  if (!startDate || !endDate) {
+    const d = new Date();
+    endDate = d.toISOString().split('T')[0];
+    const past = new Date();
+    past.setDate(d.getDate() - 6);
+    startDate = past.toISOString().split('T')[0];
+  }
+
+  let periodLabel = '7 Hari Terakhir';
+  if (preset === '30d') periodLabel = '30 Hari Terakhir';
+  else if (preset === 'this_month') periodLabel = 'Bulan Ini';
+  else if (preset === 'custom') {
+    periodLabel = `${new Date(startDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(endDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`;
+  }
+
   const [stats, recentOrders, grossProfitData, pendingIssues, outletIssues, outletTrend] = await Promise.all([
-    getDashboardStats(session.role, session.outletId),
-    getRecentOrders(session.role, session.outletId),
-    session.role === 'ADMIN_PUSAT' ? getGrossProfitAnalytics() : Promise.resolve([]),
+    getDashboardStats(session.role, session.outletId, startDate, endDate),
+    getRecentOrders(session.role, session.outletId, startDate, endDate),
+    session.role === 'ADMIN_PUSAT' ? getGrossProfitAnalytics(startDate, endDate) : Promise.resolve([]),
     session.role === 'ADMIN_PUSAT' ? getPendingIssues() : Promise.resolve([]),
     session.role !== 'ADMIN_PUSAT' ? getOutletIssues(session.outletId) : Promise.resolve([]),
-    session.role !== 'ADMIN_PUSAT' ? getOutletOrderTrend(session.outletId) : Promise.resolve([]),
+    session.role !== 'ADMIN_PUSAT' ? getOutletOrderTrend(session.outletId, startDate, endDate) : Promise.resolve([]),
   ]);
 
   const trendData = session.role === 'ADMIN_PUSAT' ? await getInventoryValueTrend(stats.stockValue) : [];
@@ -55,9 +80,15 @@ export default async function DashboardPage() {
 
   return (
     <section className="screen">
+      <DashboardDateFilter
+        initialStartDate={startDate}
+        initialEndDate={endDate}
+        initialPreset={preset}
+      />
+
       <div className="kpi-row">
         <div className="kpi-card">
-          <div className="kpi-label">Order Minggu Ini</div>
+          <div className="kpi-label">Order ({periodLabel})</div>
           <div className="kpi-value">{fmt(stats.ordersPending + stats.ordersProcessing + stats.ordersShipped + stats.ordersCompleted)}</div>
           <div className="kpi-note">dari outlet</div>
         </div>
@@ -108,7 +139,7 @@ export default async function DashboardPage() {
           <div className="card" style={{ margin: 0 }}>
             <div className="card-head">
               <div>
-                <h3>Margin Kasar / Outlet (7 Hari Terakhir)</h3>
+                <h3>Margin Kasar / Outlet ({periodLabel})</h3>
               </div>
             </div>
             <div className="card-body">
@@ -130,7 +161,7 @@ export default async function DashboardPage() {
         <div className="card" style={{ marginTop: '24px' }}>
           <div className="card-head">
             <div>
-              <h3>Aktivitas Permintaan (7 Hari Terakhir)</h3>
+              <h3>Aktivitas Permintaan ({periodLabel})</h3>
             </div>
           </div>
           <div className="card-body">
