@@ -362,6 +362,7 @@ export async function getCombinedStockReport(search: string | null) {
     SELECT 
       i.id, i.name as item_name, c.name as category_name, i.category_id,
       i.smallest_unit, i.purchase_unit, i.conversion_ratio, i.minimum_threshold,
+      (SELECT MIN(ib.expired_date)::text FROM inventory_batches ib WHERE ib.item_id = i.id AND ib.qty_remaining > 0) AS expired_date,
       COALESCE((SELECT ending_balance FROM inventory_logs il WHERE il.item_id = i.id ORDER BY il.created_at DESC, id DESC LIMIT 1), 0)::numeric AS central_stock,
       COALESCE((SELECT SUM(current_balance) FROM outlet_stocks os WHERE os.item_id = i.id), 0)::numeric AS outlet_stock,
       COALESCE((SELECT jsonb_object_agg(os.outlet_id::text, os.current_balance) FROM outlet_stocks os WHERE os.item_id = i.id), '{}'::jsonb) AS outlet_stocks_map,

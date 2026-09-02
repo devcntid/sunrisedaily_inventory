@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, email, role, outlet_id, password } = body;
+    const { name, email, role, outlet_id } = body;
     
     if (!name || !email || !role) {
       return NextResponse.json({ success: false, message: 'Semua kolom wajib diisi' }, { status: 400 });
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const newUser = await createUser({
       name,
       email,
-      password: role === 'ADMIN_OUTLET' ? password : null,
+      password: undefined,
       role,
       outlet_id: outlet_id || null,
     });

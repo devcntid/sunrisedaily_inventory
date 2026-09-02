@@ -52,6 +52,8 @@ export async function createGoodsReceipt(data: {
     purchase_order_item_id: number;
     item_id: number;
     qty_received: number;
+    expired_date?: string | null;
+    batch_number?: string | null;
   }[];
 }) {
   return withTransaction(async (client) => {
@@ -248,6 +250,33 @@ export async function createGoodsReceipt(data: {
          FROM UNNEST($1::int[], $2::int[], $3::numeric[], $4::numeric[], $5::numeric[], $6::int[]) AS u(item_id, vendor_id, qty_recv, unit_price, new_avg, po_item_id)`,
         [ph_itemIds, ph_vendorIds, ph_qtyReceived, ph_unitPrices, ph_newAvgPrices, ph_poItemIds]
       );
+
+      // Catat Batch Inventaris jika item memiliki expired_date
+      for (const item of data.items) {
+        if (item.expired_date) {
+          const effectiveItemId = effectiveIdMap.get(Number(item.item_id)) ?? Number(item.item_id);
+          const itemData = itemMap.get(Number(item.item_id));
+          const masterRatio = itemData ? parseFloat(String(itemData.conversion_ratio || '1')) : 1;
+          const poiData = poiMap.get(Number(item.purchase_order_item_id));
+          const poRatioRaw = poiData?.conversion_ratio;
+          const ratio = (poRatioRaw !== null && poRatioRaw !== undefined && parseFloat(String(poRatioRaw)) > 0)
+            ? parseFloat(String(poRatioRaw))
+            : masterRatio;
+          const qtyInSmallestUnit = Number(item.qty_received) * ratio;
+
+          await client.query(
+            `INSERT INTO inventory_batches (item_id, goods_receipt_id, batch_number, expired_date, qty_received, qty_remaining)
+             VALUES ($1, $2, $3, $4, $5, $5)`,
+            [
+              effectiveItemId,
+              Number(receipt.id),
+              item.batch_number || `BATCH-${receiptNumber.replace(/\//g, '-')}-${effectiveItemId}`,
+              item.expired_date,
+              qtyInSmallestUnit
+            ]
+          );
+        }
+      }
 
       // WARN-02 Fix: Jalankan autoFulfillPendingRequestsBulk dan checkAndCreateAlertBulk
       // secara bulk pada client transaksi yang sama.

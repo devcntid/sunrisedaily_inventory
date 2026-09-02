@@ -22,6 +22,7 @@ export interface OutletMonitoringItem {
   is_active: boolean;
   is_global?: boolean;
   venue_ids?: number[];
+  expired_date?: string | null;
   central_stock: string | number;
   current_average_price: string | number;
 }
@@ -107,6 +108,7 @@ export async function getOutletMonitoringData() {
         i.minimum_threshold,
         i.is_active,
         i.is_global,
+        (SELECT MIN(ib.expired_date)::text FROM inventory_batches ib WHERE ib.item_id = i.id AND ib.qty_remaining > 0) AS expired_date,
         (SELECT json_agg(iv.venue_id) FROM item_venues iv WHERE iv.item_id = i.id) AS venue_ids,
         COALESCE((
           SELECT ending_balance 

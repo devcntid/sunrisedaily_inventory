@@ -343,8 +343,7 @@ export default function ItemsPage() {
       order_multiple: String(Number(item.order_multiple ?? 1)),
       has_brands: hasBrands,
       is_global: item.is_global ?? true,
-      // Postgres json_agg mengembalikan venue_id sebagai string, pastikan dikonversi ke number & filter nilai 0/null
-      venue_ids: (item.venue_ids || []).map((id: number | string) => Number(id)).filter((id: number) => id > 0)
+      venue_ids: (item.venue_ids || []).map((id: number | string) => Number(id)).filter((id: number) => id > 0),
     });
     let childBrands = items.filter(i => i.parent_id === item.id).map(child => ({
       id: String(child.id),
@@ -692,7 +691,6 @@ export default function ItemsPage() {
                       <th style={{ width: 140 }}>Satuan (Beli / Ecer)</th>
                       <th className="center" style={{ width: 80 }}>Rasio</th>
                       <th className="right" style={{ width: 120 }}>Rata Harga</th>
-                      <th></th>
                       <th className="right" style={{ width: 100 }}>Aksi</th>
                     </tr>
                   </thead>
@@ -742,7 +740,6 @@ export default function ItemsPage() {
                             {fmtCurrency((item.current_average_price || 0) * (Number(item.conversion_ratio) || 1)).replace(',00', '')}
                             <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>per {item.purchase_unit}</div>
                           </td>
-                          <td></td>
                           <td className="right">
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
                               <Button size="sm" onClick={(e) => { e.stopPropagation(); openEdit(item); }} title={isParent ? "Edit Induk" : "Edit Barang"} style={{ background: 'var(--blue-light)', color: 'var(--blue)', border: '1px solid #bcdcf3' }}>
@@ -794,12 +791,12 @@ export default function ItemsPage() {
             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
               {editing?.last_purchase_price != null && Number(editing.last_purchase_price) > 0 && (
                 <div style={{ padding: '10px 14px', background: '#dcfce7', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 6, display: 'inline-flex', alignItems: 'center', fontWeight: 600, fontSize: 13 }}>
-                   Beli Terakhir: {fmtCurrency(Number(editing.last_purchase_price))} / {editing.smallest_unit}
+                  Beli Terakhir: {fmtCurrency(Number(editing.last_purchase_price))} / {editing.smallest_unit}
                 </div>
               )}
               {editing?.current_average_price != null && Number(editing.current_average_price) > 0 && (
                 <div style={{ padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 6, display: 'inline-flex', alignItems: 'center', fontWeight: 600, fontSize: 13 }}>
-                   HPP Saat Ini: {fmtCurrency(Number(editing.current_average_price))} / {editing.smallest_unit}
+                  HPP Saat Ini: {fmtCurrency(Number(editing.current_average_price))} / {editing.smallest_unit}
                 </div>
               )}
             </div>
@@ -920,7 +917,7 @@ export default function ItemsPage() {
                     ]}
                   />
                 </div>
-                  
+
                 <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
                     <label className="req" style={{ marginBottom: 0 }}>Isi per 1 {form.purchase_unit || (form.has_brands ? 'Satuan Pelaporan' : 'Satuan Beli')}</label>
@@ -931,11 +928,11 @@ export default function ItemsPage() {
                         form.has_brands
                           ? `Karena barang ini punya merek-merek dengan kemasan yang berbeda (contoh: Dus, Galon, dll), tentukan satuan penengah untuk merangkum total stok fisik Anda (misal: 1 Liter = 1000 ml).`
                           : (Number(form.purchase_price) > 0 && Number(form.conversion_ratio) > 0
-                              ? `1 ${form.purchase_unit} = ${form.conversion_ratio} ${form.smallest_unit} • Harga HPP (Moving Avg): ${fmtCurrency(Number(form.purchase_price) / Number(form.conversion_ratio))} per ${form.smallest_unit}${editing?.last_purchase_price != null && Number(editing.last_purchase_price) > 0
-                                ? ` • Beli Terakhir: ${fmtCurrency(Number(editing.last_purchase_price))} per ${editing.smallest_unit}`
-                                : ''
-                              }`
-                              : 'Masukkan angka konversi dari satuan beli (contoh: 1 Kg berisi 1000 gr).')
+                            ? `1 ${form.purchase_unit} = ${form.conversion_ratio} ${form.smallest_unit} • Harga HPP (Moving Avg): ${fmtCurrency(Number(form.purchase_price) / Number(form.conversion_ratio))} per ${form.smallest_unit}${editing?.last_purchase_price != null && Number(editing.last_purchase_price) > 0
+                              ? ` • Beli Terakhir: ${fmtCurrency(Number(editing.last_purchase_price))} per ${editing.smallest_unit}`
+                              : ''
+                            }`
+                            : 'Masukkan angka konversi dari satuan beli (contoh: 1 Kg berisi 1000 gr).')
                       }
                     />
                   </div>
@@ -981,7 +978,7 @@ export default function ItemsPage() {
                     }} onFocus={e => e.target.select()} />
                   </div>
                 )}
-                
+
                 {form.has_brands && <div style={{ flex: 1 }} />}
               </div>
 
@@ -1174,13 +1171,13 @@ export default function ItemsPage() {
                                 <Trash2 size={16} />
                               </button>
                               <div style={{ padding: '0 4px', height: 36, display: 'flex', alignItems: 'center' }}>
-                                <Toggle 
-                                  checked={brand.is_active !== false} 
+                                <Toggle
+                                  checked={brand.is_active !== false}
                                   onChange={(checked) => {
                                     const newBrands = [...brands];
                                     newBrands[i].is_active = checked;
                                     setBrands(newBrands);
-                                  }} 
+                                  }}
                                   size="sm"
                                   title={brand.is_active !== false ? "Nonaktifkan Brand" : "Aktifkan Brand"}
                                 />
@@ -1210,7 +1207,7 @@ export default function ItemsPage() {
             </div>
           )}
 
-          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog

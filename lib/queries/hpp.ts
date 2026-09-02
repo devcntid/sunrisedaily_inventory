@@ -9,7 +9,7 @@ import type { PoolClient } from 'pg';
 export async function updateMenuPrice(id: number, price: number) {
   const res = await query(`
     UPDATE menus
-    SET sale_price = $1, updated_at = NOW()
+    SET sale_price = $1
     WHERE id = $2
   `, [price, id]);
   return (res.rowCount ?? 0) > 0;
@@ -111,6 +111,7 @@ export type HppRecipe = {
   total_cost: number | null;
   sale_price: number | null;
   category_id?: bigint | null;
+  is_all_venues?: boolean;
 };
 
 export type HppRecipeIngredient = {
@@ -340,7 +341,8 @@ export async function getHppRecipeDetail(recipeId: number): Promise<{
       LOWER(COALESCE(r.yield_unit, (SELECT smallest_unit FROM items WHERE LOWER(name) = LOWER(r.name) LIMIT 1))) AS yield_unit, 
       r.subtotal, r.x_factor_pct,
       r.total_cost, r.sale_price,
-      m.category_id
+      m.category_id,
+      ((SELECT COUNT(DISTINCT r2.venue_id) FROM recipes r2 WHERE (r2.menu_id = r.menu_id OR LOWER(r2.name) = LOWER(r.name))) >= (SELECT COUNT(*) FROM venues)) AS is_all_venues
     FROM recipes r
     JOIN venues v ON v.id = r.venue_id
     LEFT JOIN menus m ON m.id = r.menu_id
@@ -559,7 +561,7 @@ export async function getHppStats(): Promise<{
 
 export async function createRecipe(data: {
   name: string;
-  venue_id: number;
+  venue_id: number | string;
   yield_amount: number;
   yield_unit?: string;
   x_factor_pct: number;
@@ -572,31 +574,20 @@ export async function createRecipe(data: {
     const subtotal = data.ingredients.reduce((sum, ing) => sum + (ing.quantity * ing.cost_per_unit), 0);
     const total_cost = subtotal + (subtotal * data.x_factor_pct);
 
-    // 2. Insert recipe
-    const recRes = await client.query(`
-      INSERT INTO recipes (name, venue_id, yield, yield_unit, subtotal, x_factor_pct, total_cost, sale_price)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `, [data.name, data.venue_id, data.yield_amount, data.yield_unit || null, subtotal, data.x_factor_pct, total_cost, data.sale_price ?? null]);
-    
-    const recipeId = recRes.rows[0].id;
-
-    // 3. Insert ingredients
-    for (let i = 0; i < data.ingredients.length; i++) {
-      const ing = data.ingredients[i];
-      const extension = ing.quantity * ing.cost_per_unit;
-      await client.query(`
-        INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, cost_per_unit, extension, sort_order)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [recipeId, ing.ingredient_id, ing.quantity, ing.unit || null, ing.cost_per_unit, extension, i + 1]);
+    // Determine target venues (all venues or specific venue)
+    let targetVenueIds: number[] = [];
+    if (data.venue_id === 'ALL' || !data.venue_id) {
+      const vRes = await client.query(`SELECT id FROM venues ORDER BY id`);
+      targetVenueIds = vRes.rows.map((r: any) => Number(r.id));
+    } else {
+      targetVenueIds = [Number(data.venue_id)];
     }
 
-    // 4. Update menus HPP and link menu_id automatically
+    // 2. Find or create menu entry
     let menuRes = await client.query(`SELECT id FROM menus WHERE display_name ILIKE $1 OR name ILIKE $1 LIMIT 1`, [data.name]);
     let menuId = menuRes.rows[0]?.id;
 
     if (!menuId) {
-      // Always create a menu entry even if category_id is not provided
       const newMenu = await client.query(`
         INSERT INTO menus (name, display_name, category_id, sale_price) 
         VALUES ($1, $2, $3, $4) 
@@ -605,53 +596,72 @@ export async function createRecipe(data: {
       menuId = newMenu.rows[0].id;
     }
 
-    if (menuId) {
-      await client.query(`UPDATE recipes SET menu_id = $1 WHERE id = $2`, [menuId, recipeId]);
-      
-      // Update menu's category and sale price if provided
-      if (data.category_id || data.sale_price !== undefined) {
-        const updates = [];
-        const queryParams: any[] = [];
-        let paramIdx = 1;
-  
-        if (data.category_id) {
-          updates.push(`category_id = $${paramIdx++}`);
-          queryParams.push(data.category_id);
-        }
-        if (data.sale_price !== undefined) {
-          updates.push(`sale_price = COALESCE($${paramIdx++}, sale_price)`);
-          queryParams.push(data.sale_price);
-        }
-  
-        if (updates.length > 0) {
-          queryParams.push(menuId);
-          await client.query(`
-            UPDATE menus 
-            SET ${updates.join(', ')} 
-            WHERE id = $${paramIdx}
-          `, queryParams);
-        }
+    let firstRecipeId: number | null = null;
+
+    // 3. For each target venue, insert or update recipe & ingredients
+    for (const vId of targetVenueIds) {
+      const existing = await client.query(
+        `SELECT id FROM recipes WHERE (menu_id = $1 OR name ILIKE $2) AND venue_id = $3 LIMIT 1`,
+        [menuId, data.name, vId]
+      );
+
+      let recipeId: number;
+      if (existing.rows.length > 0) {
+        recipeId = existing.rows[0].id;
+        await client.query(`
+          UPDATE recipes
+          SET name = $1, menu_id = $2, yield = $3, yield_unit = $4,
+              subtotal = $5, x_factor_pct = $6, total_cost = $7,
+              sale_price = COALESCE($8, sale_price), revision_date = CURRENT_DATE
+          WHERE id = $9
+        `, [data.name, menuId, data.yield_amount, data.yield_unit || null, subtotal, data.x_factor_pct, total_cost, data.sale_price ?? null, recipeId]);
+
+        await client.query(`DELETE FROM recipe_ingredients WHERE recipe_id = $1`, [recipeId]);
+      } else {
+        const recRes = await client.query(`
+          INSERT INTO recipes (name, venue_id, menu_id, yield, yield_unit, subtotal, x_factor_pct, total_cost, sale_price)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING id
+        `, [data.name, vId, menuId, data.yield_amount, data.yield_unit || null, subtotal, data.x_factor_pct, total_cost, data.sale_price ?? null]);
+        recipeId = recRes.rows[0].id;
       }
-      
-      await client.query(`
-        UPDATE menus
-        SET 
-          category_id = COALESCE($3, menus.category_id),
-          sale_price = COALESCE($4, menus.sale_price),
-          hpp = r.total_cost / NULLIF(r.yield, 0),
-          hpp_ratio = LEAST((r.total_cost / NULLIF(r.yield, 0)) / NULLIF(COALESCE($4, menus.sale_price), 0), 99.999999)
-        FROM recipes r
-        WHERE r.id = $1 AND menus.id = $2
-      `, [recipeId, menuId, data.category_id || null, data.sale_price ?? null]);
+
+      if (!firstRecipeId) firstRecipeId = recipeId;
+
+      // Insert ingredients
+      for (let i = 0; i < data.ingredients.length; i++) {
+        const ing = data.ingredients[i];
+        const extension = ing.quantity * ing.cost_per_unit;
+        await client.query(`
+          INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, cost_per_unit, extension, sort_order)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [recipeId, ing.ingredient_id, ing.quantity, ing.unit || null, ing.cost_per_unit, extension, i + 1]);
+      }
     }
 
-    return recipeId;
+    // 4. Update menus HPP and details
+    if (menuId) {
+      const hppPerPortion = total_cost / (data.yield_amount || 1);
+      const salePrice = data.sale_price || 0;
+      const hppRatio = salePrice > 0 ? (hppPerPortion / salePrice) : 0;
+
+      await client.query(`
+        UPDATE menus
+        SET category_id = COALESCE($1, category_id),
+            sale_price = COALESCE($2, sale_price),
+            hpp = $3,
+            hpp_ratio = LEAST($4, 99.999999)
+        WHERE id = $5
+      `, [data.category_id || null, data.sale_price ?? null, hppPerPortion, hppRatio, menuId]);
+    }
+
+    return firstRecipeId || 0;
   });
 }
 
 export async function updateRecipe(id: number, data: {
   name: string;
-  venue_id: number;
+  venue_id: number | string;
   yield_amount: number;
   yield_unit?: string;
   x_factor_pct: number;
@@ -659,6 +669,10 @@ export async function updateRecipe(id: number, data: {
   category_id?: number;
   ingredients: { ingredient_id: number; quantity: number; unit?: string; cost_per_unit: number }[];
 }) {
+  if (data.venue_id === 'ALL') {
+    return await createRecipe(data);
+  }
+
   return await withTransaction(async (client) => {
     // 1. Calculate subtotal
     const subtotal = data.ingredients.reduce((sum, ing) => sum + (ing.quantity * ing.cost_per_unit), 0);
@@ -670,7 +684,7 @@ export async function updateRecipe(id: number, data: {
       SET name = $1, venue_id = $2, yield = $3, yield_unit = $4, 
           subtotal = $5, x_factor_pct = $6, total_cost = $7, sale_price = COALESCE($8, sale_price), revision_date = CURRENT_DATE
       WHERE id = $9
-    `, [data.name, data.venue_id, data.yield_amount, data.yield_unit || null, subtotal, data.x_factor_pct, total_cost, data.sale_price ?? null, id]);
+    `, [data.name, Number(data.venue_id), data.yield_amount, data.yield_unit || null, subtotal, data.x_factor_pct, total_cost, data.sale_price ?? null, id]);
 
     if (data.category_id || data.sale_price !== undefined) {
       const updates = [];

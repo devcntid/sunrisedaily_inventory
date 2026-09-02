@@ -34,6 +34,7 @@ export default function ReceiptClient({ poId }: { poId: number }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [receivedQtys, setReceivedQtys] = useState<Record<number, string>>({});
+  const [expiredDates, setExpiredDates] = useState<Record<number, string>>({});
   const [deliveryNote, setDeliveryNote] = useState('');
   const [receiptDate, setReceiptDate] = useState(() => {
     const tzOffset = (new Date()).getTimezoneOffset() * 60000;
@@ -145,7 +146,8 @@ export default function ReceiptClient({ poId }: { poId: number }) {
           itemsPayload.push({
             purchase_order_item_id: item.id,
             item_id: item.item_id,
-            qty_received: rQty
+            qty_received: rQty,
+            expired_date: expiredDates[item.id] || null
           });
         }
       }
@@ -274,6 +276,7 @@ export default function ReceiptClient({ poId }: { poId: number }) {
                   <th style={{ padding: '8px 12px', fontSize: 11, color: '#64748b', textAlign: 'right', width: 120 }}>SUDAH DITERIMA</th>
                   <th style={{ padding: '8px 12px', fontSize: 11, color: '#64748b', textAlign: 'right', width: 120 }}>SISA (BACKORDER)</th>
                   <th style={{ padding: '8px 12px', fontSize: 11, color: '#64748b', textAlign: 'right', width: 150 }}>DITERIMA KALI INI</th>
+                  <th style={{ padding: '8px 12px', fontSize: 11, color: '#64748b', textAlign: 'left', width: 160 }}>EXPIRED DATE</th>
                 </tr>
               </thead>
               <tbody>
@@ -313,6 +316,16 @@ export default function ReceiptClient({ poId }: { poId: number }) {
                         />
                         <span className="muted" style={{ fontSize: 12, minWidth: 32, textAlign: 'left' }}>{item.purchase_unit || 'pcs'}</span>
                       </div>
+                    </td>
+                    <td style={{ padding: '6px 12px' }}>
+                      <input 
+                        type="date"
+                        className="input"
+                        value={expiredDates[item.id] || ''}
+                        onChange={e => setExpiredDates(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        disabled={remainingQty <= 0}
+                        style={{ width: '135px', padding: '4px 8px', fontSize: 12, background: remainingQty <= 0 ? '#f1f5f9' : '#ffffff', border: '1px solid #cbd5e1' }}
+                      />
                     </td>
                   </tr>
                 )})}
