@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
       order_multiple: Number(body.order_multiple ?? 1),
       is_global: body.is_global !== false && body.is_global !== 'false', // default true
       venue_ids: Array.isArray(body.venue_ids) ? body.venue_ids.map(Number) : [],
+      brand: body.brand ? String(body.brand).trim() : null,
+      spec: body.spec ? String(body.spec).trim() : null,
     };
 
     let item;

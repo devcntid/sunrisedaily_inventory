@@ -30,8 +30,22 @@ interface Item {
   has_children?: boolean;
   is_global?: boolean;
   venue_ids?: number[];
+  brand?: string | null;
+  spec?: string | null;
 }
-interface BrandForm { id?: string; name: string; barcode: string; purchase_unit: string; purchase_price: string; conversion_ratio: string; current_average_price?: number; last_purchase_price?: number; is_active?: boolean; }
+interface BrandForm {
+  id?: string;
+  name: string;
+  barcode: string;
+  purchase_unit: string;
+  purchase_price: string;
+  conversion_ratio: string;
+  current_average_price?: number;
+  last_purchase_price?: number;
+  is_active?: boolean;
+  brand?: string;
+  spec?: string;
+}
 interface Category { id: number; name: string; }
 interface Ingredient { id: number; name: string; unit?: string; }
 interface Venue { id: number; name: string; }
@@ -152,7 +166,32 @@ export default function ItemsPage() {
   // Modals
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
-  const [form, setForm] = useState({ name: '', barcode: '', category_id: '', purchase_unit: '', package_inner_size: '', smallest_unit: '', conversion_ratio: '1', minimum_threshold: '10', target_stock: '20', threshold_type: 'ABSOLUT', is_perishable: false, is_active: true, purchase_price: '0', has_conversion: false, ingredient_id: '', is_split_allowed: false, min_order_qty: '1', order_multiple: '1', has_brands: false, is_global: true, venue_ids: [] as number[] });
+  const [form, setForm] = useState({
+    name: '',
+    item_base_name: '',
+    brand: '',
+    spec: '',
+    barcode: '',
+    category_id: '',
+    purchase_unit: '',
+    package_inner_size: '',
+    smallest_unit: '',
+    conversion_ratio: '1',
+    minimum_threshold: '10',
+    target_stock: '20',
+    threshold_type: 'ABSOLUT',
+    is_perishable: false,
+    is_active: true,
+    purchase_price: '0',
+    has_conversion: false,
+    ingredient_id: '',
+    is_split_allowed: false,
+    min_order_qty: '1',
+    order_multiple: '1',
+    has_brands: false,
+    is_global: true,
+    venue_ids: [] as number[]
+  });
   const [brands, setBrands] = useState<BrandForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -315,7 +354,32 @@ export default function ItemsPage() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ name: '', barcode: '', category_id: '', purchase_unit: '', package_inner_size: '', smallest_unit: '', conversion_ratio: '1', minimum_threshold: '10', target_stock: '20', threshold_type: 'ABSOLUT', is_perishable: false, is_active: true, purchase_price: '0', has_conversion: false, ingredient_id: '', is_split_allowed: false, min_order_qty: '1', order_multiple: '1', has_brands: false, is_global: true, venue_ids: [] });
+    setForm({
+      name: '',
+      item_base_name: '',
+      brand: '',
+      spec: '',
+      barcode: '',
+      category_id: '',
+      purchase_unit: '',
+      package_inner_size: '',
+      smallest_unit: '',
+      conversion_ratio: '1',
+      minimum_threshold: '10',
+      target_stock: '20',
+      threshold_type: 'ABSOLUT',
+      is_perishable: false,
+      is_active: true,
+      purchase_price: '0',
+      has_conversion: false,
+      ingredient_id: '',
+      is_split_allowed: false,
+      min_order_qty: '1',
+      order_multiple: '1',
+      has_brands: false,
+      is_global: true,
+      venue_ids: []
+    });
     setBrands([]);
     setError('');
     setShowModal(true);
@@ -325,12 +389,22 @@ export default function ItemsPage() {
     setEditing(item);
     const hasConv = item.purchase_unit !== item.smallest_unit || Number(item.conversion_ratio) > 1;
     const hasBrands = items.some(i => i.parent_id === item.id) || !!item.has_children;
+    let baseName = item.name;
+    if (item.brand) {
+      baseName = baseName.replace(new RegExp(`\\b${item.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+    }
+    if (item.spec) {
+      baseName = baseName.replace(new RegExp(`\\b${item.spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+    }
     setForm({
-      name: item.name, barcode: item.barcode || `ERC${String(item.id).padStart(6, '0')}`, category_id: String(item.category_id ?? ''),
+      name: item.name,
+      item_base_name: (item.brand || item.spec) ? (baseName || item.name) : item.name,
+      brand: item.brand || '',
+      spec: item.spec || '',
+      barcode: item.barcode || `ERC${String(item.id).padStart(6, '0')}`,
+      category_id: String(item.category_id ?? ''),
       purchase_unit: normalizeUnit(item.purchase_unit), package_inner_size: '',
       smallest_unit: normalizeUnit(item.smallest_unit), conversion_ratio: String(Number(item.conversion_ratio)),
-      // Untuk barang dengan brand: threshold disimpan langsung dalam satuan terkecil (ml), tidak perlu dibagi
-      // Untuk barang tanpa brand: threshold di-display dalam satuan beli (purchase_unit)
       minimum_threshold: String(hasBrands ? Number(item.minimum_threshold) : Number(item.minimum_threshold) / (hasConv ? Number(item.conversion_ratio || 1) : 1)),
       target_stock: String(Number(item.target_stock ?? 0) / (hasConv ? Number(item.conversion_ratio || 1) : 1)),
       threshold_type: item.threshold_type,
@@ -348,6 +422,8 @@ export default function ItemsPage() {
     let childBrands = items.filter(i => i.parent_id === item.id).map(child => ({
       id: String(child.id),
       name: child.name,
+      brand: child.brand || '',
+      spec: child.spec || item.spec || '',
       barcode: child.barcode || `ERC${String(child.id).padStart(6, '0')}`,
       purchase_unit: child.purchase_unit || '',
       purchase_price: String(Math.round(Number(child.current_average_price ?? 0) * Number(child.conversion_ratio || 1))),
@@ -367,6 +443,8 @@ export default function ItemsPage() {
             setBrands(data.data.map((child: any) => ({
               id: String(child.id),
               name: child.name,
+              brand: child.brand || '',
+              spec: child.spec || item.spec || '',
               barcode: child.barcode || `ERC${String(child.id).padStart(6, '0')}`,
               purchase_unit: child.purchase_unit || '',
               purchase_price: String(Math.round(Number(child.current_average_price ?? 0) * Number(child.conversion_ratio || 1))),
@@ -407,7 +485,7 @@ export default function ItemsPage() {
     try {
       const url = editing ? `/api/items/${editing.id}` : '/api/items';
       const method = editing ? 'PATCH' : 'POST';
-      const { package_inner_size, has_conversion, purchase_price, ...cleanForm } = form;
+      const { package_inner_size, has_conversion, purchase_price, item_base_name, ...cleanForm } = form;
 
       const finalRatio = Number(form.conversion_ratio) || 1;
       const finalSmallestUnit = form.smallest_unit;
@@ -432,6 +510,9 @@ export default function ItemsPage() {
 
       const payload = {
         ...cleanForm,
+        name: form.name.trim(),
+        brand: form.brand ? form.brand.trim() : null,
+        spec: form.spec ? form.spec.trim() : null,
         category_id: Number(form.category_id),
         purchase_unit: finalPurchaseUnit,
         smallest_unit: finalSmallestUnit,
@@ -449,12 +530,14 @@ export default function ItemsPage() {
           const brandRatio = Number(b.conversion_ratio) || 1;
           return {
             id: b.id,
-            name: b.name,
+            name: b.name.trim(),
             barcode: b.barcode,
             purchase_unit: b.purchase_unit || form.purchase_unit,
             purchase_price: Number(b.purchase_price || 0) / brandRatio,
             conversion_ratio: brandRatio,
-            is_active: b.is_active ?? true
+            is_active: b.is_active ?? true,
+            brand: b.brand ? b.brand.trim() : undefined,
+            spec: b.spec ? b.spec.trim() : (form.spec ? form.spec.trim() : undefined)
           };
         })
       };
@@ -724,6 +807,12 @@ export default function ItemsPage() {
                                 <span style={{ fontSize: 9, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, letterSpacing: 0.5 }}>HPP / RESEP</span>
                               )}
                             </div>
+                            {(item.brand || item.spec) && (
+                              <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+                                {item.brand && <span style={{ fontSize: 10, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Merek: {item.brand}</span>}
+                                {item.spec && <span style={{ fontSize: 10, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Spek: {item.spec}</span>}
+                              </div>
+                            )}
                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                               {!item.is_active && <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>NONAKTIF</span>}
                               {item.is_perishable && <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>CEPAT BASI</span>}
@@ -806,15 +895,24 @@ export default function ItemsPage() {
             {/* LEFT COLUMN: Main Inputs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
+              {/* Row 1: Nama Item Pokok, Merek / Brand, Spesifikasi / Ukuran */}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1.4, position: 'relative' }}>
                   <Input
-                    label="Nama Barang"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    label="Nama Item Pokok"
+                    required
+                    placeholder="Contoh: MSG / Beras / Susu UHT"
+                    value={form.item_base_name}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const combined = form.has_brands
+                        ? [val, form.spec].filter(Boolean).map(s => s.trim()).join(' ')
+                        : [val, form.brand, form.spec].filter(Boolean).map(s => s.trim()).join(' ');
+                      setForm(f => ({ ...f, item_base_name: val, name: combined }));
+                      setShowNameSuggestions(true);
+                    }}
                     onFocus={() => setShowNameSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
-                    placeholder="buat nama barang baru"
                   />
                   {showNameSuggestions && matchingExistingItems.length > 0 && (
                     <div style={{
@@ -849,7 +947,16 @@ export default function ItemsPage() {
                           onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            setForm(f => ({ ...f, name: item.name }));
+                            let baseName = item.name;
+                            if (item.brand) baseName = baseName.replace(new RegExp(`\\b${item.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+                            if (item.spec) baseName = baseName.replace(new RegExp(`\\b${item.spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+                            setForm(f => ({
+                              ...f,
+                              name: item.name,
+                              item_base_name: item.brand || item.spec ? (baseName || item.name) : item.name,
+                              brand: item.brand || '',
+                              spec: item.spec || ''
+                            }));
                             setShowNameSuggestions(false);
                           }}
                         >
@@ -865,7 +972,41 @@ export default function ItemsPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ flex: 0.9 }}>
+
+                {!form.has_brands && (
+                  <div style={{ flex: 1 }}>
+                    <Input
+                      label="Merek / Brand"
+                      placeholder="Contoh: Ajinomoto / Diamond"
+                      value={form.brand}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const combined = [form.item_base_name, val, form.spec].filter(Boolean).map(s => s.trim()).join(' ');
+                        setForm(f => ({ ...f, brand: val, name: combined }));
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="Spesifikasi / Ukuran"
+                    placeholder="Contoh: 1 kg / 250 gr / 2 L"
+                    value={form.spec}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const combined = form.has_brands
+                        ? [form.item_base_name, val].filter(Boolean).map(s => s.trim()).join(' ')
+                        : [form.item_base_name, form.brand, val].filter(Boolean).map(s => s.trim()).join(' ');
+                      setForm(f => ({ ...f, spec: val, name: combined }));
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: SKU, Kategori */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
                   <Input
                     label="SKU"
                     value={form.barcode || ''}
@@ -873,7 +1014,7 @@ export default function ItemsPage() {
                     placeholder="Otomatis jika dikosongkan"
                   />
                 </div>
-                <div className="form-group" style={{ flex: 1.8, marginBottom: 0 }}>
+                <div className="form-group" style={{ flex: 1.5, marginBottom: 0 }}>
                   <label className="req">Kategori</label>
                   <Select
                     value={form.category_id}

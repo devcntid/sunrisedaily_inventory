@@ -13,6 +13,8 @@ export async function GET() {
     const isianData = items.map((row) => ({
       id_barang: Number(row.item_id),
       nama_barang: row.nama_barang,
+      merek: row.merk || '',
+      spesifikasi: row.spec || '',
       kategori: row.kategori,
       satuan_beli: row.satuan_beli,
       satuan_terkecil: row.satuan_terkecil,
@@ -29,7 +31,9 @@ export async function GET() {
     if (isianData.length === 0) {
       isianData.push({
         id_barang: '' as unknown as number,
-        nama_barang: 'Contoh: Arabica Blend Premium',
+        nama_barang: 'Arabica Blend Premium',
+        merek: 'Excelso',
+        spesifikasi: '1 kg',
         kategori: categories[0]?.name || 'Bahan Baku',
         satuan_beli: 'Dus',
         satuan_terkecil: 'ml',
@@ -48,6 +52,8 @@ export async function GET() {
     wsIsian['!cols'] = [
       { wch: 12 },
       { wch: 35 },
+      { wch: 18 },
+      { wch: 18 },
       { wch: 20 },
       { wch: 14 },
       { wch: 16 },

@@ -57,6 +57,7 @@ const CENTRAL_MENU: NavItem[] = [
   { section: 'DISTRIBUSI KE OUTLET' },
   { href: '/requests', label: 'Permintaan Outlet', icon: <Icon name="list" /> },
   { href: '/delivery-orders', label: 'Pengiriman (Surat Jalan)', icon: <Icon name="truck" /> },
+  { href: '/outlet-transfers', label: 'Mutasi Antar Outlet', icon: <Icon name="truck" /> },
   { href: '/outlet-purchases', label: 'Belanja Outlet', icon: <Icon name="list" /> },
   { href: '/returns', label: 'Tiket Masalah', icon: <AlertOctagon size={15} /> },
 
@@ -84,6 +85,7 @@ const OUTLET_MENU: NavItem[] = [
   { section: 'PENGADAAN BARANG' },
   { href: '/outlet/requests', label: 'Order ke Pusat', icon: <Icon name="cart" /> },
   { href: '/outlet/receive-goods', label: 'Penerimaan Barang', icon: <Icon name="truck" /> },
+  { href: '/outlet/transfers', label: 'Mutasi Antar Outlet', icon: <Icon name="truck" /> },
   { href: '/outlet/local-purchases', label: 'Belanja Outlet', icon: <Icon name="box" /> },
 
   { section: 'MANAJEMEN STOK & PENJUALAN' },

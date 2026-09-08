@@ -635,6 +635,8 @@ button {
   padding: 12px 14px;
   box-shadow: var(--shadow);
   display: block;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .kpi-card .kpi-label,
@@ -645,6 +647,9 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpi-card .kpi-value,
@@ -653,6 +658,9 @@ button {
   font-size: 22px;
   font-weight: 700;
   margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kpi-card .kpi-note,

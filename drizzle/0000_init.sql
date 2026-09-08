@@ -51,6 +51,9 @@ DROP TABLE IF EXISTS "public"."delivery_note_items" CASCADE;
 DROP TABLE IF EXISTS "public"."moka_oauth_states" CASCADE;
 DROP TABLE IF EXISTS "public"."goods_receipts" CASCADE;
 DROP TABLE IF EXISTS "public"."purchase_order_items" CASCADE;
+DROP TABLE IF EXISTS "public"."outlet_transfer_items" CASCADE;
+DROP TABLE IF EXISTS "public"."outlet_transfers" CASCADE;
+DROP TABLE IF EXISTS "public"."inventory_batches" CASCADE;
 
 -- Sequence and defined type
 CREATE SEQUENCE IF NOT EXISTS items_id_seq;
@@ -90,6 +93,9 @@ CREATE SEQUENCE IF NOT EXISTS delivery_note_issues_id_seq;
 CREATE SEQUENCE IF NOT EXISTS delivery_note_items_id_seq;
 CREATE SEQUENCE IF NOT EXISTS goods_receipts_id_seq;
 CREATE SEQUENCE IF NOT EXISTS purchase_order_items_id_seq;
+CREATE SEQUENCE IF NOT EXISTS outlet_transfers_id_seq;
+CREATE SEQUENCE IF NOT EXISTS outlet_transfer_items_id_seq;
+CREATE SEQUENCE IF NOT EXISTS inventory_batches_id_seq;
 
 -- Table Definition
 CREATE TABLE "public"."items" (
@@ -118,6 +124,8 @@ CREATE TABLE "public"."items" (
     "package_inner_size" varchar,
     "parent_id" int8,
     "is_global" bool DEFAULT true,
+    "brand" varchar(100),
+    "spec" varchar(100),
     PRIMARY KEY ("id")
 );
 
@@ -1173,6 +1181,74 @@ CREATE INDEX idx_po_items_purchase_order_id ON public.purchase_order_items USING
 CREATE INDEX idx_po_items_item_id ON public.purchase_order_items USING btree (item_id) WHERE (item_id IS NOT NULL);
 
 
+-- Table Definition
+CREATE TABLE "public"."outlet_transfers" (
+
+    "id" int8 NOT NULL DEFAULT nextval('outlet_transfers_id_seq'::regclass),
+    "transfer_number" varchar(50) NOT NULL,
+    "from_outlet_id" int8 NOT NULL,
+    "to_outlet_id" int8 NOT NULL,
+    "requested_by" int8,
+    "approved_by" int8,
+    "status" varchar(30) NOT NULL DEFAULT 'PENDING_APPROVAL'::character varying,
+    "notes" text,
+    "rejection_reason" text,
+    "total_cost" numeric(15,2) NOT NULL DEFAULT 0,
+    "created_at" timestamptz NOT NULL DEFAULT now(),
+    "approved_at" timestamptz,
+    "received_at" timestamptz,
+    PRIMARY KEY ("id")
+);
+
+-- Column Comments
+COMMENT ON COLUMN "public"."outlet_transfers"."status" IS 'Valid values: PENDING_APPROVAL, APPROVED, COMPLETED, REJECTED, CANCELLED';
+
+-- Indices
+CREATE UNIQUE INDEX outlet_transfers_transfer_number_key ON public.outlet_transfers USING btree (transfer_number);
+CREATE INDEX idx_outlet_transfers_from_outlet ON public.outlet_transfers USING btree (from_outlet_id);
+CREATE INDEX idx_outlet_transfers_to_outlet ON public.outlet_transfers USING btree (to_outlet_id);
+CREATE INDEX idx_outlet_transfers_status ON public.outlet_transfers USING btree (status);
+
+
+-- Table Definition
+CREATE TABLE "public"."outlet_transfer_items" (
+
+    "id" int8 NOT NULL DEFAULT nextval('outlet_transfer_items_id_seq'::regclass),
+    "transfer_id" int8 NOT NULL,
+    "item_id" int8 NOT NULL,
+    "requested_qty" numeric(12,2) NOT NULL,
+    "received_qty" numeric(12,2) NOT NULL DEFAULT 0,
+    "unit" varchar(50) NOT NULL,
+    "cost_per_unit" numeric(15,2) NOT NULL DEFAULT 0,
+    "subtotal_cost" numeric(15,2) NOT NULL DEFAULT 0,
+    "created_at" timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY ("id")
+);
+
+-- Indices
+CREATE INDEX idx_outlet_transfer_items_transfer ON public.outlet_transfer_items USING btree (transfer_id);
+CREATE INDEX idx_outlet_transfer_items_item ON public.outlet_transfer_items USING btree (item_id);
+
+
+-- Table Definition
+CREATE TABLE "public"."inventory_batches" (
+
+    "id" int8 NOT NULL DEFAULT nextval('inventory_batches_id_seq'::regclass),
+    "item_id" int8 NOT NULL,
+    "goods_receipt_id" int8,
+    "batch_number" varchar(100),
+    "expired_date" date NOT NULL,
+    "qty_received" numeric(12,2) NOT NULL,
+    "qty_remaining" numeric(12,2) NOT NULL,
+    "created_at" timestamptz DEFAULT now(),
+    PRIMARY KEY ("id")
+);
+
+-- Indices
+CREATE INDEX idx_inventory_batches_item_id ON public.inventory_batches USING btree (item_id);
+CREATE INDEX idx_inventory_batches_goods_receipt_id ON public.inventory_batches USING btree (goods_receipt_id);
+
+
 -- Foreign keys (added after all tables exist)
 ALTER TABLE "public"."items" ADD CONSTRAINT "items_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE RESTRICT;
 ALTER TABLE "public"."items" ADD CONSTRAINT "items_ingredient_id_fkey" FOREIGN KEY ("ingredient_id") REFERENCES "public"."ingredients"("id") ON DELETE SET NULL;
@@ -1251,3 +1327,15 @@ ALTER TABLE "public"."goods_receipts" ADD CONSTRAINT "goods_receipts_purchase_or
 ALTER TABLE "public"."goods_receipts" ADD CONSTRAINT "goods_receipts_received_by_fkey" FOREIGN KEY ("received_by") REFERENCES "public"."users"("id");
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_purchase_order_id_fkey" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_orders"("id") ON DELETE CASCADE;
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE RESTRICT;
+
+ALTER TABLE "public"."outlet_transfers" ADD CONSTRAINT "outlet_transfers_from_outlet_id_fkey" FOREIGN KEY ("from_outlet_id") REFERENCES "public"."outlets"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."outlet_transfers" ADD CONSTRAINT "outlet_transfers_to_outlet_id_fkey" FOREIGN KEY ("to_outlet_id") REFERENCES "public"."outlets"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."outlet_transfers" ADD CONSTRAINT "outlet_transfers_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+ALTER TABLE "public"."outlet_transfers" ADD CONSTRAINT "outlet_transfers_approved_by_fkey" FOREIGN KEY ("approved_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;
+
+ALTER TABLE "public"."outlet_transfer_items" ADD CONSTRAINT "outlet_transfer_items_transfer_id_fkey" FOREIGN KEY ("transfer_id") REFERENCES "public"."outlet_transfers"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."outlet_transfer_items" ADD CONSTRAINT "outlet_transfer_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE RESTRICT;
+
+ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_goods_receipt_id_fkey" FOREIGN KEY ("goods_receipt_id") REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL;
+

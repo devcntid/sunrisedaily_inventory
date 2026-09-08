@@ -823,7 +823,7 @@ export default function StockMonitoringPage() {
                                 </td>
                                 <td className="center" style={{ width: 140, minWidth: 140, maxWidth: 140, borderRight: '1px solid #f1f5f9', background: '#ffffff', position: 'sticky', left: 180, zIndex: 10, padding: '8px 6px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                    {getExpBadge(item.expired_date) || <span style={{ color: '#94a3b8', fontSize: 11 }}>-</span>}
+                                    {getExpBadge(item.expired_date)}
                                     <button
                                       onClick={(e) => { e.stopPropagation(); openBatchModal(item); }}
                                       title="Kelola / Set Expired Date"
