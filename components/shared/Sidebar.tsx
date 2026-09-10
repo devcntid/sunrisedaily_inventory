@@ -117,8 +117,6 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
   // Listen for hamburger toggle from TopBar
   useEffect(() => {
     const handleToggle = () => {
-      // Safely assume if they clicked the hamburger, they are on mobile layout
-      // because the hamburger is only visible <= 960px
       setMobileOpen(prev => !prev);
     };
     window.addEventListener('toggle-sidebar', handleToggle);
@@ -134,7 +132,6 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
 
   useEffect(() => {
     if (pathname === '/returns' && role === 'ADMIN_PUSAT') {
-      // Reset badge segera saat halaman /returns dikunjungi
       setLiveReturnsCount(0);
     }
     if (pathname === '/outlet-purchases' && role === 'ADMIN_PUSAT') {
@@ -162,8 +159,6 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
             const data = await reqRes.json();
             setLiveRequestCount(data.count ?? 0);
           }
-          // Jangan update badge saat sedang di halaman /returns (sudah di-reset di atas)
-          // (Returns and Local Purchases are handled by the 10s fast poll below)
         } else if (role === 'ADMIN_OUTLET') {
           const lastSeenReceiveGoods = localStorage.getItem('lastSeenReceiveGoods') || '';
           const receiveUrl = lastSeenReceiveGoods ? `/api/delivery-notes/shipped-count?since=${lastSeenReceiveGoods}` : '/api/delivery-notes/shipped-count';
@@ -186,10 +181,8 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
     };
 
     fetchBadges();
-    // Poll semua badge setiap 30 detik
     const interval = setInterval(fetchBadges, 30000);
 
-    // Re-fetch segera saat tab kembali aktif
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') fetchBadges();
     };
@@ -201,7 +194,7 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
     };
   }, [role]);
 
-  // Polling khusus returns badge setiap 10 detik (real-time) — terpisah dari poll umum
+  // Polling khusus returns badge setiap 10 detik (real-time)
   useEffect(() => {
     if (role !== 'ADMIN_PUSAT') return;
 
@@ -228,13 +221,11 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
     };
 
     const interval = setInterval(fetchFastBadges, 10000);
-    // Jalankan sekali saat pertama mount
     fetchFastBadges();
     return () => clearInterval(interval);
   }, [role, pathname]);
 
   const getEffectiveBadge = (href: string, actualCount: number) => {
-    // Hide badge if currently on this page or any sub-page
     if (pathname === href || pathname.startsWith(href + '/')) return 0;
     return actualCount;
   };
@@ -266,7 +257,7 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
       >
         <div className="sidebar-top">
           <div className="brand-wrapper">
-            <Image src="/logo-putih.png" alt="Logo" width={50} height={50} className="sunburst" />
+            <Image src="/logo-putih.png" alt="Logo" width={50} height={50} className="sunburst" priority />
             <div className="brand-text">
               <span className="brand-name">Sunrise Daily</span>
               <span className="brand-sub">Sistem Pengadaan & Inventori</span>
@@ -291,7 +282,6 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
             }
             let isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href!);
 
-            // Fix overlapping active states for Moka POS Integration
             if (item.href === '/sales-report') {
               isActive = pathname === '/sales-report';
             }
@@ -306,6 +296,7 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
 
             if (item.href === '/master-data/items' && (pathname.startsWith('/master-data/items') || pathname.startsWith('/master-data/outlets') || pathname.startsWith('/master-data/vendors') || pathname.startsWith('/master-data/categories'))) isActive = true;
             if (item.href === '/hpp' && pathname.startsWith('/hpp')) isActive = true;
+            if (item.href === '/opname/central' && pathname.startsWith('/opname')) isActive = true;
             if (item.href === '/outlet/sales') {
               isActive = pathname === '/outlet/sales';
             }

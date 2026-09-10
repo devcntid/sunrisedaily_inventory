@@ -216,9 +216,65 @@ export async function getItemsForOpname(locationType: string, locationId?: numbe
            ois.outlet_id IS NOT NULL OR 
            ov.outlet_id IS NOT NULL
          )
-       ORDER BY c.name, i.name`,
-       [locationId]
-    ).then(r => r.rows);
+        ORDER BY c.name, i.name`,
+        [locationId]
+     ).then(r => r.rows);
+   }
+   return [];
+ }
+
+export async function getTopUsageItemsByOutlet(outletId: number, days: number = 30, limit: number = 10) {
+  try {
+    const logsRes = await query(
+      `SELECT i.id AS item_id, i.name AS item_name, i.smallest_unit, i.purchase_unit, i.conversion_ratio,
+              c.name AS category_name, i.current_average_price,
+              SUM(ABS(oil.qty_change))::numeric AS total_usage,
+              COALESCE(os.current_balance, 0)::numeric AS system_balance
+       FROM outlet_inventory_logs oil
+       JOIN items i ON i.id = oil.item_id
+       LEFT JOIN categories c ON c.id = i.category_id
+       LEFT JOIN outlet_stocks os ON os.item_id = i.id AND os.outlet_id = oil.outlet_id
+       WHERE oil.outlet_id = $1
+         AND (oil.qty_change < 0 OR oil.movement_type IN ('SALES', 'OUT', 'RECIPE_USAGE', 'USAGE', 'ADJ_MINUS'))
+         AND oil.created_at >= (CURRENT_DATE - ($2 || ' days')::interval)
+         AND i.is_active = TRUE
+         AND i.parent_id IS NULL
+       GROUP BY i.id, i.name, i.smallest_unit, i.purchase_unit, i.conversion_ratio, c.name, i.current_average_price, os.current_balance
+       ORDER BY total_usage DESC
+       LIMIT $3`,
+      [outletId, days, limit]
+    );
+
+    if (logsRes.rows.length >= Math.min(limit, 5)) {
+      return logsRes.rows;
+    }
+
+    const itemIdsFound = logsRes.rows.map(r => r.item_id);
+    const remainingLimit = limit - logsRes.rows.length;
+
+    const fallbackRes = await query(
+      `SELECT DISTINCT
+         i.id AS item_id, i.name AS item_name, i.smallest_unit, i.purchase_unit, i.conversion_ratio,
+         c.name AS category_name, i.current_average_price,
+         0::numeric AS total_usage,
+         COALESCE(os.current_balance, 0)::numeric AS system_balance
+       FROM items i
+       LEFT JOIN categories c ON c.id = i.category_id
+       LEFT JOIN outlet_stocks os ON os.item_id = i.id AND os.outlet_id = $1
+       LEFT JOIN outlet_item_settings ois ON ois.item_id = i.id AND ois.outlet_id = $1
+       WHERE i.is_active = TRUE
+         AND i.parent_id IS NULL
+         AND (os.outlet_id IS NOT NULL OR ois.outlet_id IS NOT NULL)
+         ${itemIdsFound.length > 0 ? `AND i.id NOT IN (${itemIdsFound.map((_, idx) => `$${idx + 2}`).join(',')})` : ''}
+       ORDER BY system_balance DESC, i.name ASC
+       LIMIT $${itemIdsFound.length + 2}`,
+      itemIdsFound.length > 0 ? [outletId, ...itemIdsFound, remainingLimit] : [outletId, remainingLimit]
+    );
+
+    return [...logsRes.rows, ...fallbackRes.rows];
+  } catch (err) {
+    console.error('Error fetching top usage items for opname:', err);
+    return [];
   }
-  return [];
 }
+

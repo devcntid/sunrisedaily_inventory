@@ -225,12 +225,13 @@ export async function getGrossProfitAnalytics(startDate?: string, endDate?: stri
 export async function getPendingIssues() {
   try {
     const result = await query(
-      `SELECT i.id, dn.dn_number, o.name as outlet_name, i.issue_type, i.status, i.created_at
+      `SELECT i.id, dn.delivery_note_number AS dn_number, o.name AS outlet_name, i.reason AS issue_type, i.status, i.reported_at AS created_at
        FROM delivery_note_issues i
-       JOIN delivery_notes dn ON dn.id = i.delivery_note_id
-       JOIN outlets o ON o.id = dn.destination_outlet_id
+       JOIN delivery_note_items dni ON i.delivery_note_item_id = dni.id
+       JOIN delivery_notes dn ON dni.delivery_note_id = dn.id
+       JOIN outlets o ON o.id = dn.outlet_id
        WHERE i.status = 'PENDING'
-       ORDER BY i.created_at DESC LIMIT 5`
+       ORDER BY i.reported_at DESC LIMIT 5`
     );
     return result.rows;
   } catch { return []; }
@@ -240,11 +241,12 @@ export async function getOutletIssues(outletId: number | null) {
   if (!outletId) return [];
   try {
     const result = await query(
-      `SELECT i.id, dn.dn_number, i.issue_type, i.status, i.created_at
+      `SELECT i.id, dn.delivery_note_number AS dn_number, i.reason AS issue_type, i.status, i.reported_at AS created_at
        FROM delivery_note_issues i
-       JOIN delivery_notes dn ON dn.id = i.delivery_note_id
-       WHERE dn.destination_outlet_id = $1
-       ORDER BY i.created_at DESC LIMIT 5`,
+       JOIN delivery_note_items dni ON i.delivery_note_item_id = dni.id
+       JOIN delivery_notes dn ON dni.delivery_note_id = dn.id
+       WHERE dn.outlet_id = $1
+       ORDER BY i.reported_at DESC LIMIT 5`,
       [outletId]
     );
     return result.rows;

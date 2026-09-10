@@ -9,15 +9,25 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/Select';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Toast } from '@/components/ui/Toast';
+import { 
+  Search, 
+  ArrowLeft, 
+  Save, 
+  Lock, 
+  X,
+  AlertCircle,
+  User,
+  Calendar
+} from 'lucide-react';
 
 const REASON_CATEGORIES = [
-  { value: 'SALAH_CATAT', label: 'Salah Catat / Koreksi (+ / -)' },
-  { value: 'BONUS_SUPPLIER', label: 'Bonus / Kelebihan Kirim (+)' },
-  { value: 'RETUR_BELUM_CATAT', label: 'Retur Belum Dicatat (+)' },
-  { value: 'RUSAK', label: 'Rusak (-)' },
-  { value: 'KADALUARSA', label: 'Kadaluarsa (-)' },
-  { value: 'HILANG_SUSUT', label: 'Hilang / Susut (-)' },
-  { value: 'LAINNYA', label: 'Lainnya (+ / -)' },
+  { value: 'SALAH_CATAT', label: 'Salah Catat / Koreksi' },
+  { value: 'BONUS_SUPPLIER', label: 'Bonus Supplier' },
+  { value: 'RETUR_BELUM_CATAT', label: 'Retur Belum Dicatat' },
+  { value: 'RUSAK', label: 'Barang Rusak' },
+  { value: 'KADALUARSA', label: 'Kadaluarsa' },
+  { value: 'HILANG_SUSUT', label: 'Hilang / Susut' },
+  { value: 'LAINNYA', label: 'Lainnya' },
 ];
 
 function formatUnit(unit: string | null | undefined): string {
@@ -28,19 +38,21 @@ function formatUnit(unit: string | null | undefined): string {
   return unit;
 }
 
-
 export default function OutletOpnameDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [header, setHeader] = useState<any>(null);
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
   const [details, setDetails] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [limit, setLimit] = useState<number | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [filterMode, setFilterMode] = useState<'all' | 'top10'>('top10');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isOpen: boolean }>({ message: '', type: 'info', isOpen: false });
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: '', message: '', onConfirm: () => {} });
@@ -51,40 +63,60 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
 
   const fetchOpname = useCallback(async () => {
     setLoading(true);
-    // Fetch header
-    const hRes = await fetch(`/api/opname/${id}`);
-    if (hRes.ok) {
-      const hData = await hRes.json();
-      setHeader(hData.data);
-      setIsLocked(hData.data?.status === 'LOCKED');
-      
-      if (hData.data?.location_id) {
-        // Fetch all items for input
-        const iRes = await fetch(`/api/opname/items?location_type=OUTLET&location_id=${hData.data.location_id}`);
-        const iData = await iRes.json();
-        setItems(iData.data ?? []);
-      }
-    }
+    try {
+      // Fetch header
+      const hRes = await fetch(`/api/opname/${id}`);
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        setHeader(hData.data);
+        setIsLocked(hData.data?.status === 'LOCKED');
+        
+        if (hData.data?.location_id) {
+          // Fetch all items for input & top recommendations in parallel
+          const [iRes, recRes] = await Promise.all([
+            fetch(`/api/opname/items?location_type=OUTLET&location_id=${hData.data.location_id}`),
+            fetch(`/api/opname/recommendations?outlet_id=${hData.data.location_id}&limit=10`)
+          ]);
 
-    // Fetch existing details for this session
-    const dRes = await fetch(`/api/opname/${id}/detail`);
-    const dData = await dRes.json();
-    setDetails(dData.data ?? []);
-    setLoading(false);
+          if (iRes.ok) {
+            const iData = await iRes.json();
+            setItems(iData.data ?? []);
+          }
+
+          if (recRes.ok) {
+            const recData = await recRes.json();
+            setRecommendations(recData.data ?? []);
+          }
+        }
+      }
+
+      // Fetch existing details for this session
+      const dRes = await fetch(`/api/opname/${id}/detail`);
+      if (dRes.ok) {
+        const dData = await dRes.json();
+        setDetails(dData.data ?? []);
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => { fetchOpname(); }, [fetchOpname]);
 
-  const getDetail = (itemId: number) => details.find(d => d.item_id === itemId);
+  const getDetail = (itemId: number) => details.find(d => Number(d.item_id) === Number(itemId));
+
+  // Coerce all IDs to Numbers for safe Set matching
+  const top10ItemIds = new Set(recommendations.slice(0, 10).map(r => Number(r.item_id)));
 
   // Outlet opname: input langsung dalam smallest_unit (gr, ml, Pcs)
-  // karena staf outlet menghitung sisa bahan dalam satuan terkecil (misal: sisa 250 gr gula)
   const handleQtyChange = (itemId: number, systemBalance: number, actualQtySmall: string) => {
     if (isLocked) return;
     const numericVal = actualQtySmall.replace(/[^0-9.]/g, '');
     const qtySmall = numericVal === '' ? systemBalance : parseFloat(numericVal);
 
-    const existing = details.find(d => d.item_id === itemId);
+    const existing = details.find(d => Number(d.item_id) === Number(itemId));
     const variance = qtySmall - systemBalance;
 
     // Reset reason if variance becomes 0
@@ -96,17 +128,17 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
     }
 
     if (existing) {
-      setDetails(details.map(d => d.item_id === itemId ? { 
+      setDetails(details.map(d => Number(d.item_id) === Number(itemId) ? { 
         ...d, 
         actual_physical_qty: numericVal === '' ? '' : qtySmall, 
-        input_value: numericVal, // preserve exact string input
+        input_value: numericVal,
         variance, 
         reason_category, 
         reason_notes 
       } : d));
     } else {
       setDetails([...details, { 
-        item_id: itemId, 
+        item_id: Number(itemId), 
         system_balance: systemBalance, 
         actual_physical_qty: numericVal === '' ? '' : qtySmall, 
         input_value: numericVal, 
@@ -117,13 +149,13 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
 
   const handleReasonChange = (itemId: number, field: 'reason_category' | 'reason_notes', value: string) => {
     if (isLocked) return;
-    setDetails(details.map(d => d.item_id === itemId ? { ...d, [field]: value } : d));
+    setDetails(details.map(d => Number(d.item_id) === Number(itemId) ? { ...d, [field]: value } : d));
   };
 
   const handleSave = async (submit: boolean = false) => {
     // Validate reasons for non-zero variance items
     if (submit) {
-      const invalidDetails = details.filter(d => d.variance !== 0 && !d.reason_category);
+      const invalidDetails = details.filter(d => Number(d.variance) !== 0 && !d.reason_category);
       if (invalidDetails.length > 0) {
         showToast('Alasan wajib diisi untuk barang yang memiliki selisih stok.', 'error');
         return;
@@ -137,12 +169,13 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
 
     setSaving(true);
     try {
-      // Upsert all details
+      // Upsert only details that have actual input
       for (const detail of details) {
-        if (detail.actual_physical_qty !== undefined) {
+        if (detail.actual_physical_qty !== undefined && detail.actual_physical_qty !== '') {
           const payload = {
             ...detail,
-            actual_physical_qty: detail.actual_physical_qty === '' ? detail.system_balance : parseFloat(String(detail.actual_physical_qty))
+            item_id: Number(detail.item_id),
+            actual_physical_qty: parseFloat(String(detail.actual_physical_qty))
           };
           await fetch(`/api/opname/${id}/detail`, {
             method: 'POST',
@@ -161,13 +194,13 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
         });
         const data = await res.json();
         if (data.success) {
-          showToast('Opname Stok berhasil dikunci. Penyesuaian telah dicatat pada Log Inventaris Outlet.', 'success');
+          showToast('Sampling Opname berhasil dikunci. Penyesuaian stok telah diterapkan pada outlet.', 'success');
           fetchOpname();
         } else {
-          showToast(data.message || 'Failed to lock opname.', 'error');
+          showToast(data.message || 'Gagal mengunci sesi opname.', 'error');
         }
       } else {
-        showToast(`Draft berhasil disimpan (${details.length} item). Stok belum berubah.`, 'success');
+        showToast(`Draf berhasil disimpan (${details.filter(d => d.actual_physical_qty !== '').length} barang dicatat). Stok belum berubah.`, 'success');
       }
     } catch (err: unknown) {
       showToast((err instanceof Error ? err.message : 'Unknown error'), 'error');
@@ -176,222 +209,399 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Memuat data opname...</div>;
-  if (!header) return <div style={{ padding: 40, textAlign: 'center' }}>Sesi tidak ditemukan.</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-500">
+        <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <div className="text-sm font-medium">Memuat data sampling opname outlet...</div>
+      </div>
+    );
+  }
 
-  const paginatedItems = limit === 'all' ? items : items.slice((currentPage - 1) * limit, currentPage * limit);
-  const totalPages = limit === 'all' ? 1 : Math.ceil(items.length / limit);
+  if (!header) {
+    return (
+      <div className="p-8 text-center bg-white rounded-xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+        <AlertCircle size={36} className="text-red-500 mx-auto mb-3" />
+        <h3 className="text-base font-bold text-slate-800">Sesi Opname Tidak Ditemukan</h3>
+        <p className="text-xs text-slate-500 mt-1 mb-4">Sesi opname mungkin telah dihapus atau URL tidak valid.</p>
+        <Button variant="outline" size="sm" onClick={() => router.push('/opname/central')}>
+          Kembali ke Daftar Opname
+        </Button>
+      </div>
+    );
+  }
+
+  // Filter items based on filterMode, selectedItemId, and searchQuery
+  let displayedItems = items;
+  if (selectedItemId) {
+    displayedItems = items.filter(i => Number(i.item_id) === Number(selectedItemId));
+  } else if (filterMode === 'top10') {
+    displayedItems = items.filter(i => top10ItemIds.has(Number(i.item_id)));
+  }
+
+  if (searchQuery.trim()) {
+    const q = searchQuery.toLowerCase();
+    displayedItems = displayedItems.filter(i => 
+      String(i.item_name || '').toLowerCase().includes(q) || 
+      String(i.category_name || '').toLowerCase().includes(q)
+    );
+  }
+
+  const paginatedItems = limit === 'all' ? displayedItems : displayedItems.slice((currentPage - 1) * limit, currentPage * limit);
+  const totalPages = limit === 'all' ? 1 : Math.ceil(displayedItems.length / limit);
 
   return (
     <section className="screen">
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', gap: 12 }}>
+      <div className="card shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+        
+        {/* Header Bar */}
+        <div className="p-4 md:p-5 border-b border-slate-200 bg-white flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h3 style={{ fontSize: 18, margin: 0, fontWeight: 700 }}>Detail Opname Outlet — {new Date(header.count_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</h3>
-            <div style={{ marginTop: 8, display: 'flex', gap: 16, alignItems: 'center' }}>
-              <Badge variant={isLocked ? 'green' : header.status === 'SUBMITTED' ? 'blue' : 'gray'}>{header.status === 'LOCKED' ? 'Selesai (Terkunci)' : header.status === 'SUBMITTED' ? 'Diajukan' : header.status === 'DRAFT' ? 'Draf' : header.status}</Badge>
-              <span className="muted" style={{ fontSize: 13 }}>
-                <span className="font-bold">Mulai:</span> {new Date(header.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                Sampling Outlet
               </span>
-              <span className="muted" style={{ fontSize: 13 }}>
-                <span className="font-bold">Terakhir Diubah:</span> {new Date(header.updated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-              </span>
+              <h2 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">
+                {header.location_name ? `Stock Opname: ${header.location_name}` : 'Stock Opname Outlet'}
+              </h2>
+            </div>
+            
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+              <div className="flex items-center gap-1.5">
+                <Badge variant={isLocked ? 'green' : header.status === 'SUBMITTED' ? 'blue' : 'gray'}>
+                  {header.status === 'LOCKED' ? 'Selesai (Terkunci)' : header.status === 'SUBMITTED' ? 'Diajukan' : 'Draf'}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-500">
+                <Calendar size={13} className="text-slate-400" />
+                <span>Tanggal: <strong className="text-slate-700">{new Date(header.count_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></span>
+              </div>
+              <div className="flex items-center gap-1.5 text-slate-500">
+                <User size={13} className="text-slate-400" />
+                <span>Auditor: <strong className="text-slate-700">{header.pic_name || 'Admin'}</strong></span>
+              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Button variant="outline" size="sm" onClick={() => setShowMobileFilters(!showMobileFilters)} className="md:hidden" style={{ height: 32, padding: '0 8px' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
-            </Button>
-            <div className="hidden md:block">
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="hidden lg:block">
               <Select
                 value={limit}
                 onChange={(val) => { setLimit(val === 'all' ? 'all' : Number(val)); setCurrentPage(1); }}
                 options={[
-                  { value: 'all', label: 'Semua' },
-                  { value: 8, label: '8' },
-                  { value: 32, label: '32' }
+                  { value: 'all', label: 'Tampilkan Semua' },
+                  { value: 10, label: '10 Baris' },
+                  { value: 25, label: '25 Baris' }
                 ]}
-                inputStyle={{ padding: '4px 10px', height: 32, fontSize: 13, minWidth: 90 }}
-                style={{ width: 100 }}
+                inputStyle={{ padding: '4px 10px', height: 32, fontSize: 12, minWidth: 120 }}
               />
             </div>
+            
             {!isLocked && (
               <>
-                <Button variant="outline" size="sm" onClick={() => handleSave(false)} disabled={saving} style={{ padding: '0 8px', height: 32 }}>
-                  <span className="hidden md:inline">Simpan Draft</span>
-                  <span className="md:hidden" title="Simpan Draft"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg></span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleSave(false)} 
+                  disabled={saving} 
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                >
+                  <Save size={14} />
+                  <span>{saving ? 'Menyimpan...' : 'Simpan Draf'}</span>
                 </Button>
-                <Button variant="primary" size="sm" onClick={() => {
-                  setConfirmState({
-                    open: true,
-                    title: 'Kunci Sesi Opname?',
-                    message: 'Apakah Anda yakin ingin mengunci sesi ini? Data tidak dapat diubah setelah dikunci.',
-                    onConfirm: () => {
-                      setConfirmState(prev => ({ ...prev, open: false }));
-                      handleSave(true);
-                    }
-                  });
-                }} disabled={saving} style={{ padding: '0 8px', height: 32 }}>
-                  <span className="hidden md:inline">Kunci & Submit</span>
-                  <span className="md:hidden" title="Kunci & Submit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+                
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  onClick={() => {
+                    setConfirmState({
+                      open: true,
+                      title: 'Kunci & Terapkan Penyesuaian Stok?',
+                      message: 'Apakah Anda yakin ingin mengunci sesi sampling opname ini? Stok outlet akan disesuaikan secara otomatis dan data tidak dapat diubah lagi.',
+                      onConfirm: () => {
+                        setConfirmState(prev => ({ ...prev, open: false }));
+                        handleSave(true);
+                      }
+                    });
+                  }} 
+                  disabled={saving} 
+                  style={{ height: 32, padding: '0 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+                >
+                  <Lock size={14} />
+                  <span>Kunci & Terapkan</span>
                 </Button>
               </>
             )}
-            <Link href="/opname/outlet">
-              <Button variant="outline" size="sm" style={{ padding: '0 8px', height: 32 }}>
-                <span className="hidden md:inline">Kembali</span>
-                <span className="md:hidden" title="Kembali"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span>
-              </Button>
-            </Link>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => router.push('/opname/central')} 
+              style={{ height: 32, padding: '0 10px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <ArrowLeft size={14} />
+              <span>Kembali</span>
+            </Button>
           </div>
         </div>
-        
-        {showMobileFilters && (
-          <div className="md:hidden" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', background: '#f8fafc' }}>
-            <div style={{ marginBottom: 4, fontSize: 12, fontWeight: 600 }}>Tampilkan Data</div>
-            <Select
-              value={limit}
-              onChange={(val) => { setLimit(val === 'all' ? 'all' : Number(val)); setCurrentPage(1); }}
-              options={[
-                { value: 'all', label: 'Semua' },
-                { value: 8, label: '8' },
-                { value: 32, label: '32' }
-              ]}
-              inputStyle={{ padding: '4px 10px', height: 32, fontSize: 13, width: '100%' }}
-              style={{ width: '100%' }}
-            />
+
+        {/* Filter & Control Bar (Clean & Simple) */}
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Segmented Filter */}
+          <div className="flex items-center gap-1 p-1 bg-slate-200/70 rounded-lg self-start">
+            <button
+              type="button"
+              onClick={() => { setSelectedItemId(null); setFilterMode('top10'); setCurrentPage(1); }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                filterMode === 'top10' && !selectedItemId
+                  ? 'bg-white text-emerald-800 shadow-sm' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Top 10 Fast-Moving
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setSelectedItemId(null); setFilterMode('all'); setCurrentPage(1); }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                filterMode === 'all' && !selectedItemId
+                  ? 'bg-white text-slate-900 shadow-sm' 
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Semua Barang ({items.length})
+            </button>
           </div>
-        )}
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <Table>
-            <thead>
-              <tr>
-                <th style={{ padding: '12px 16px', fontSize: 12, minWidth: 200 }}>Nama Barang</th>
-                <th className="right" style={{ padding: '12px 16px', fontSize: 12, width: 140 }}>Harga</th>
-                <th className="right" style={{ padding: '12px 16px', fontSize: 12, width: 120 }}>Stok Sistem</th>
-                <th className="right" style={{ width: 140, padding: '12px 16px', fontSize: 12 }}>Stok Fisik</th>
-                <th className="right" style={{ width: 100, padding: '12px 16px', fontSize: 12 }}>Selisih</th>
-                <th className="right" style={{ width: 130, padding: '12px 16px', fontSize: 12 }}>Est. Nilai Selisih</th>
-                <th style={{ width: 180, padding: '12px 16px', fontSize: 12 }}>Alasan</th>
-                <th style={{ width: 220, padding: '12px 16px', fontSize: 12 }}>Catatan</th>
-              </tr>
-            </thead>
-            <tbody style={{ fontSize: 12 }}>
-              {paginatedItems.map((item: any) => {
-                const detail = getDetail(item.item_id);
-                // Outlet: tidak pakai konversi — input & tampil langsung dalam smallest_unit
-                const smallUnit = formatUnit(item.smallest_unit);
+          {/* Search Bar */}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              className="input"
+              placeholder="Cari nama barang..."
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              style={{ width: 220, height: 32, fontSize: 12 }}
+            />
+            {searchQuery && (
+              <button 
+                type="button" 
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-slate-500 hover:text-slate-800 px-1.5 py-0.5 rounded hover:bg-slate-200 transition-colors"
+                title="Hapus pencarian"
+              >
+                <X size={13} />
+              </button>
+            )}
 
-                // actual_physical_qty di DB tersimpan dalam smallest_unit
-                const actualSmall = detail?.actual_physical_qty;
-                
-                let displayVal = detail?.input_value as string | undefined;
-                if (displayVal === undefined) {
-                  displayVal = actualSmall !== undefined && actualSmall !== null && actualSmall !== '' 
-                    ? actualSmall.toString() 
-                    : '';
-                }
+            <span className="text-xs text-slate-500 whitespace-nowrap ml-2">
+              <strong className="text-slate-800">{displayedItems.length}</strong> barang
+            </span>
+          </div>
+        </div>
 
-                const varianceSmall = Number(detail?.variance ?? 0);
-                const varianceValue = Math.round(Math.abs(Number(varianceSmall)) * Number(item.current_average_price));
+        {/* Table Content */}
+        <div className="flex-1 overflow-x-auto">
+          {displayedItems.length === 0 ? (
+            <div className="p-12 text-center text-slate-500">
+              <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-2 text-slate-400">
+                <Search size={18} />
+              </div>
+              <h4 className="text-sm font-semibold text-slate-800">Tidak ada barang yang cocok</h4>
+              <p className="text-xs text-slate-500 mt-1">Coba ganti filter atau kata kunci pencarian Anda.</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-3" 
+                onClick={() => { setFilterMode('all'); setSelectedItemId(null); setSearchQuery(''); }}
+              >
+                Tampilkan Semua Barang
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] uppercase tracking-wider font-semibold">
+                  <th style={{ padding: '10px 16px', minWidth: 220 }}>Nama Barang</th>
+                  <th className="right" style={{ padding: '10px 16px', width: 130 }}>Harga Satuan</th>
+                  <th className="right" style={{ padding: '10px 16px', width: 120 }}>Stok Sistem</th>
+                  <th className="right" style={{ padding: '10px 16px', width: 150 }}>Stok Fisik</th>
+                  <th className="right" style={{ padding: '10px 16px', width: 110 }}>Selisih</th>
+                  <th className="right" style={{ padding: '10px 16px', width: 140 }}>Nilai Selisih</th>
+                  <th style={{ padding: '10px 16px', width: 190 }}>Alasan Selisih</th>
+                  <th style={{ padding: '10px 16px', width: 200 }}>Catatan Temuan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {paginatedItems.map((item: any) => {
+                  const itemIdNum = Number(item.item_id);
+                  const detail = getDetail(itemIdNum);
+                  const smallUnit = formatUnit(item.smallest_unit);
+                  const recIdx = recommendations.findIndex(r => Number(r.item_id) === itemIdNum);
 
-                // Stok sistem dalam smallest_unit
-                const sysBalSmall = Number(item.system_balance);
+                  const actualSmall = detail?.actual_physical_qty;
+                  
+                  let displayVal = detail?.input_value as string | undefined;
+                  if (displayVal === undefined) {
+                    displayVal = actualSmall !== undefined && actualSmall !== null && actualSmall !== '' 
+                      ? actualSmall.toString() 
+                      : '';
+                  }
 
-                return (
-                  <tr key={item.item_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td className="font-bold text-[11px] md:text-[13px]" style={{ padding: '8px 16px' }}>
-                      {item.item_name as string}
-                      <div className="muted font-normal text-[10px] md:text-[11px]" style={{ marginTop: 2 }}>
-                        Satuan: {smallUnit}
-                      </div>
-                    </td>
-                    <td className="right num text-[11px] md:text-[13px]" style={{ padding: '8px 16px' }}>
-                      Rp {Math.round(Number(item.current_average_price)).toLocaleString('id-ID')}
-                      <div className="muted font-normal text-[10px] md:text-[11px]" style={{ marginTop: 2 }}>
-                        / {smallUnit}
-                      </div>
-                    </td>
-                    <td className="right num text-[11px] md:text-[13px]" style={{ padding: '8px 16px' }}>
-                      {sysBalSmall.toLocaleString('id-ID')} <span className="muted text-[10px] md:text-[11px]">{smallUnit}</span>
-                    </td>
-                    <td className="right" style={{ padding: '8px 16px' }}>
-                      <div style={{ position: 'relative' }}>
-                        <input
-                          type="number"
-                          className="input right"
-                          value={displayVal}
-                          onChange={(e) => handleQtyChange(item.item_id as number, item.system_balance as number, e.target.value)}
-                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          disabled={isLocked}
-                          placeholder="0"
-                          step="any"
-                          style={{ height: 32, width: '100%', fontSize: 13, padding: '4px 8px', paddingRight: 40, borderColor: displayVal === '' ? '#fca5a5' : 'var(--border)' }}
-                        />
-                        <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: '#64748b', pointerEvents: 'none', fontWeight: 600 }}>
-                          {smallUnit}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="right num" style={{ padding: '8px 16px', fontSize: 13 }}>
-                      {varianceSmall !== 0 ? (
-                        <span style={{ color: varianceSmall > 0 ? 'var(--primary)' : '#dc2626', fontWeight: 600 }}>
-                          {varianceSmall > 0 ? '+' : ''}{Number(varianceSmall).toLocaleString('id-ID')}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td className="right num font-mono" style={{ padding: '8px 16px', fontSize: 13, color: varianceSmall > 0 ? '#016e3f' : varianceSmall < 0 ? '#dc2626' : 'inherit', fontWeight: varianceSmall !== 0 ? 600 : 400 }}>
-                      {varianceSmall > 0 ? `+Rp ${varianceValue.toLocaleString('id-ID')}` : varianceSmall < 0 ? `-Rp ${varianceValue.toLocaleString('id-ID')}` : '-'}
-                    </td>
-                    <td style={{ padding: '8px 16px' }}>
-                      {varianceSmall !== 0 ? (
-                        <Select
-                          value={String(detail?.reason_category || '')}
-                          onChange={val => handleReasonChange(item.item_id, 'reason_category', String(val))}
-                          disabled={isLocked}
-                          options={[
-                            { value: '', label: '-- Pilih Alasan --' },
-                            ...REASON_CATEGORIES
-                          ]}
-                          inputStyle={{ height: 32, padding: '0px 8px', fontSize: 12, borderColor: !detail?.reason_category ? '#fca5a5' : 'var(--border)' }}
-                          optionStyle={{ padding: '6px 10px', fontSize: 12 }}
-                        />
-                      ) : (
-                        <span className="muted italic" style={{ fontSize: 12 }}>Tidak ada selisih</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '8px 16px' }}>
-                      {varianceSmall !== 0 && detail?.reason_category ? (
-                        <input
-                          type="text"
-                          className="input"
-                          value={String(detail?.reason_notes || '')}
-                          onChange={e => handleReasonChange(item.item_id, 'reason_notes', e.target.value)}
-                          disabled={isLocked}
-                          placeholder={detail?.reason_category === 'LAINNYA' ? 'Wajib diisi...' : 'Opsional...'}
-                          style={{ height: 32, padding: '4px 8px', fontSize: 12, width: '100%', borderColor: (detail?.reason_category === 'LAINNYA' && !String(detail?.reason_notes || '').trim()) ? '#fca5a5' : 'var(--border)' }}
-                        />
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-          <div style={{ padding: '16px' }}>
-            {totalPages > 1 && (
+                  const varianceSmall = Number(detail?.variance ?? 0);
+                  const varianceValue = Math.round(Math.abs(Number(varianceSmall)) * Number(item.current_average_price || 0));
+                  const sysBalSmall = Number(item.system_balance || 0);
+
+                  return (
+                    <tr 
+                      key={itemIdNum} 
+                      className="hover:bg-slate-50 transition-colors"
+                    >
+                      {/* Nama Barang */}
+                      <td style={{ padding: '10px 16px' }}>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-900">{item.item_name as string}</span>
+                          {recIdx >= 0 && recIdx < 10 && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded border bg-emerald-50 text-emerald-800 border-emerald-200">
+                              #{recIdx + 1}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {item.category_name || 'Bahan Baku'} • Satuan: {smallUnit}
+                        </div>
+                      </td>
+
+                      {/* Harga Satuan */}
+                      <td className="right num font-mono" style={{ padding: '10px 16px' }}>
+                        <span className="text-slate-800 font-medium">Rp {Math.round(Number(item.current_average_price || 0)).toLocaleString('id-ID')}</span>
+                        <div className="text-[10px] text-slate-400 font-sans">/ {smallUnit}</div>
+                      </td>
+
+                      {/* Stok Sistem */}
+                      <td className="right num font-mono" style={{ padding: '10px 16px' }}>
+                        <span className="font-semibold text-slate-800">{sysBalSmall.toLocaleString('id-ID')}</span>{' '}
+                        <span className="text-[11px] text-slate-400 font-sans">{smallUnit}</span>
+                      </td>
+
+                      {/* Input Stok Fisik */}
+                      <td className="right" style={{ padding: '10px 16px' }}>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            className="input right font-mono font-bold"
+                            value={displayVal}
+                            onChange={(e) => handleQtyChange(itemIdNum, sysBalSmall, e.target.value)}
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                            disabled={isLocked}
+                            placeholder="0"
+                            step="any"
+                            style={{ 
+                              height: 32, 
+                              width: '100%', 
+                              fontSize: 13, 
+                              padding: '4px 8px', 
+                              paddingRight: 42, 
+                              borderColor: displayVal !== '' ? 'var(--primary)' : '#cbd5e1',
+                              backgroundColor: displayVal !== '' ? '#fff' : '#fafafa'
+                            }}
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-sans font-medium pointer-events-none">
+                            {smallUnit}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Selisih */}
+                      <td className="right num font-mono" style={{ padding: '10px 16px' }}>
+                        {displayVal !== '' && varianceSmall !== 0 ? (
+                          <span className={`font-bold ${varianceSmall > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                            {varianceSmall > 0 ? '+' : ''}{Number(varianceSmall).toLocaleString('id-ID')}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+
+                      {/* Nilai Selisih */}
+                      <td className="right num font-mono" style={{ padding: '10px 16px' }}>
+                        {displayVal !== '' && varianceSmall !== 0 ? (
+                          <span className={`font-semibold ${varianceSmall > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                            {varianceSmall > 0 ? '+Rp ' : '-Rp '}{varianceValue.toLocaleString('id-ID')}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+
+                      {/* Alasan Selisih */}
+                      <td style={{ padding: '10px 16px' }}>
+                        {displayVal !== '' && varianceSmall !== 0 ? (
+                          <Select
+                            value={String(detail?.reason_category || '')}
+                            onChange={val => handleReasonChange(itemIdNum, 'reason_category', String(val))}
+                            disabled={isLocked}
+                            options={[
+                              { value: '', label: '-- Pilih Alasan --' },
+                              ...REASON_CATEGORIES
+                            ]}
+                            inputStyle={{ 
+                              height: 30, 
+                              padding: '2px 8px', 
+                              fontSize: 11, 
+                              borderColor: !detail?.reason_category ? '#fca5a5' : '#cbd5e1',
+                              backgroundColor: !detail?.reason_category ? '#fef2f2' : '#fff'
+                            }}
+                          />
+                        ) : (
+                          <span className="text-[11px] text-slate-300 italic">Sesuai</span>
+                        )}
+                      </td>
+
+                      {/* Catatan Temuan */}
+                      <td style={{ padding: '10px 16px' }}>
+                        {displayVal !== '' && varianceSmall !== 0 && detail?.reason_category ? (
+                          <input
+                            type="text"
+                            className="input text-xs"
+                            value={String(detail?.reason_notes || '')}
+                            onChange={e => handleReasonChange(itemIdNum, 'reason_notes', e.target.value)}
+                            disabled={isLocked}
+                            placeholder={detail?.reason_category === 'LAINNYA' ? 'Wajib diisi...' : 'Catatan opsional...'}
+                            style={{ 
+                              height: 30, 
+                              padding: '2px 8px', 
+                              fontSize: 11, 
+                              width: '100%', 
+                              borderColor: (detail?.reason_category === 'LAINNYA' && !String(detail?.reason_notes || '').trim()) ? '#fca5a5' : '#cbd5e1' 
+                            }}
+                          />
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="p-3 border-t border-slate-200 bg-white">
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                totalItems={items.length}
+                totalItems={displayedItems.length}
                 itemsPerPage={limit as number}
                 onPageChange={setCurrentPage}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
+
       <ConfirmDialog
         open={confirmState.open}
         title={confirmState.title}
@@ -399,6 +609,7 @@ export default function OutletOpnameDetailPage({ params }: { params: Promise<{ i
         onConfirm={confirmState.onConfirm}
         onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
       />
+      
       <Toast
         isOpen={toast.isOpen}
         message={toast.message}

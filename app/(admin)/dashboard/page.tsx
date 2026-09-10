@@ -268,13 +268,22 @@ export default async function DashboardPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {outletIssues.map((issue: any) => (
-                        <TableRowLink key={issue.id} href="/returns">
-                          <td className="font-mono text-primary font-bold">{issue.dn_number}</td>
-                          <td>{issue.issue_type}</td>
-                          <td><span className={`badge ${issue.status === 'PENDING' ? 'badge-amber' : 'badge-green'}`}>{issue.status}</span></td>
-                        </TableRowLink>
-                      ))}
+                      {outletIssues.map((issue: any) => {
+                        const statusLabel = 
+                          issue.status === 'PENDING' ? 'Menunggu Review' :
+                          issue.status === 'APPROVED_REPLACE' ? 'Disetujui: Kirim Ulang' :
+                          issue.status === 'APPROVED_WRITE_OFF' ? 'Disetujui: Dihapus Buku' :
+                          issue.status;
+                        const statusBadgeClass = issue.status === 'PENDING' ? 'badge-amber' : 'badge-green';
+
+                        return (
+                          <TableRowLink key={issue.id} href={`/outlet/receive-goods?scan=${issue.dn_number}`}>
+                            <td className="font-mono text-primary font-bold">{issue.dn_number}</td>
+                            <td>{issue.issue_type}</td>
+                            <td><span className={`badge ${statusBadgeClass}`}>{statusLabel}</span></td>
+                          </TableRowLink>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 )}
@@ -308,17 +317,28 @@ export default async function DashboardPage({
                       </tr>
                     </thead>
                     <tbody>
-                      {pendingIssues.map((issue: any) => (
-                        <TableRowLink key={issue.id} href={`/delivery-orders/${issue.dn_number}`}>
-                          <td><span className="font-mono text-primary font-bold">{issue.dn_number}</span></td>
-                          <td>{issue.outlet_name}</td>
-                          <td>
-                            <span className={`badge ${issue.issue_type === 'BROKEN' ? 'badge-danger' : issue.issue_type === 'MISSING' ? 'badge-warning' : 'badge-default'}`}>
-                              {issue.issue_type === 'BROKEN' ? 'Barang Rusak' : issue.issue_type === 'MISSING' ? 'Kurang/Hilang' : issue.issue_type}
-                            </span>
-                          </td>
-                        </TableRowLink>
-                      ))}
+                      {pendingIssues.map((issue: any) => {
+                        const issueLabel =
+                          issue.issue_type === 'BROKEN' ? 'Barang Rusak' :
+                          issue.issue_type === 'MISSING' ? 'Kurang/Hilang' :
+                          issue.issue_type;
+                        const badgeClass =
+                          issue.issue_type === 'BROKEN' || issue.issue_type?.toLowerCase().includes('rusak') ? 'badge-danger' :
+                          issue.issue_type === 'MISSING' || issue.issue_type?.toLowerCase().includes('kurang') || issue.issue_type?.toLowerCase().includes('hilang') ? 'badge-warning' :
+                          'badge-default';
+
+                        return (
+                          <TableRowLink key={issue.id} href="/returns">
+                            <td><span className="font-mono text-primary font-bold">{issue.dn_number}</span></td>
+                            <td>{issue.outlet_name}</td>
+                            <td>
+                              <span className={`badge ${badgeClass}`}>
+                                {issueLabel}
+                              </span>
+                            </td>
+                          </TableRowLink>
+                        );
+                      })}
                     </tbody>
                   </Table>
                 )}

@@ -69,7 +69,6 @@ export function proxy(request: NextRequest) {
   ];
 
   const OUTLET_ONLY = [
-    '/opname/outlet',
     '/receive-goods',
     '/outlet', // Protect all /outlet routes for Outlet Admin only
   ];

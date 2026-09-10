@@ -1338,4 +1338,3 @@ ALTER TABLE "public"."outlet_transfer_items" ADD CONSTRAINT "outlet_transfer_ite
 
 ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE CASCADE;
 ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_goods_receipt_id_fkey" FOREIGN KEY ("goods_receipt_id") REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL;
-
