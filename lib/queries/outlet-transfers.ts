@@ -18,6 +18,7 @@ export interface OutletTransfer {
   created_at: string;
   approved_at: string | null;
   received_at: string | null;
+  proof_image_url?: string | null;
   item_count?: number;
 }
 
@@ -34,6 +35,8 @@ export interface OutletTransferItem {
   smallest_unit?: string;
   purchase_unit?: string;
   conversion_ratio?: number;
+  discrepancy_reason?: string | null;
+  issue_photo_url?: string | null;
 }
 
 export interface AvailableTransferStockItem {
@@ -257,7 +260,8 @@ export async function getOutletTransferDetail(transferId: number): Promise<{
       t.total_cost::numeric AS total_cost,
       t.created_at,
       t.approved_at,
-      t.received_at
+      t.received_at,
+      t.proof_image_url
     FROM outlet_transfers t
     LEFT JOIN outlets ofrom ON ofrom.id = t.from_outlet_id
     JOIN outlets oto ON oto.id = t.to_outlet_id
@@ -289,6 +293,7 @@ export async function getOutletTransferDetail(transferId: number): Promise<{
     created_at: r.created_at,
     approved_at: r.approved_at,
     received_at: r.received_at,
+    proof_image_url: r.proof_image_url || null,
   };
 
   const itemsRes = await query<any>(`
@@ -304,9 +309,12 @@ export async function getOutletTransferDetail(transferId: number): Promise<{
       ti.subtotal_cost::numeric AS subtotal_cost,
       i.smallest_unit,
       i.purchase_unit,
-      COALESCE(i.conversion_ratio, 1)::numeric AS conversion_ratio
+      COALESCE(i.conversion_ratio, 1)::numeric AS conversion_ratio,
+      iss.reason AS discrepancy_reason,
+      iss.photo_url AS issue_photo_url
     FROM outlet_transfer_items ti
     JOIN items i ON i.id = ti.item_id
+    LEFT JOIN outlet_transfer_issues iss ON iss.transfer_item_id = ti.id
     WHERE ti.transfer_id = $1
     ORDER BY ti.id ASC
   `, [transferId]);
@@ -324,6 +332,8 @@ export async function getOutletTransferDetail(transferId: number): Promise<{
     smallest_unit: it.smallest_unit,
     purchase_unit: it.purchase_unit,
     conversion_ratio: Number(it.conversion_ratio || 1),
+    discrepancy_reason: it.discrepancy_reason || null,
+    issue_photo_url: it.issue_photo_url || null,
   }));
 
   return {
@@ -636,14 +646,103 @@ export async function rejectOutletTransfer(transferId: number, rejectedByUserId:
   return (result.rowCount ?? 0) > 0;
 }
 
+let _transferIssuesTableChecked = false;
+export async function ensureTransferIssuesTable() {
+  if (_transferIssuesTableChecked) return;
+  try {
+    await query(`
+      ALTER TABLE outlet_transfers ADD COLUMN IF NOT EXISTS proof_image_url VARCHAR(1024);
+      CREATE TABLE IF NOT EXISTS outlet_transfer_issues (
+        id BIGSERIAL PRIMARY KEY,
+        transfer_id BIGINT NOT NULL REFERENCES outlet_transfers(id) ON DELETE CASCADE,
+        transfer_item_id BIGINT NOT NULL REFERENCES outlet_transfer_items(id) ON DELETE CASCADE,
+        qty_issue NUMERIC(12,2) NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        photo_url VARCHAR(1024),
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+        reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        resolved_at TIMESTAMPTZ,
+        resolved_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        resolution_notes VARCHAR(1024)
+      );
+      CREATE INDEX IF NOT EXISTS idx_outlet_transfer_issues_transfer ON outlet_transfer_issues(transfer_id);
+      CREATE INDEX IF NOT EXISTS idx_outlet_transfer_issues_status ON outlet_transfer_issues(status);
+    `);
+    _transferIssuesTableChecked = true;
+  } catch (err) {
+    console.error('Error ensuring outlet_transfer_issues table:', err);
+  }
+}
+
 /**
- * Konfirmasi penerimaan barang oleh Outlet Penerima (Atomic Execution: Potong Asal, Tambah Tujuan, Mutasi HPP)
+ * Mengambil daftar mutasi untuk halaman Penerimaan Barang (status APPROVED / dikirim dan COMPLETED / riwayat diterima)
  */
-export async function completeOutletTransfer(transferId: number): Promise<boolean> {
+export async function getApprovedTransfersForReceiving(outletId?: number): Promise<any[]> {
+  await ensureTransferIssuesTable();
+  const conditions = ["ot.status IN ('APPROVED', 'COMPLETED')"];
+  const params: any[] = [];
+  if (outletId) {
+    params.push(outletId);
+    conditions.push(`ot.to_outlet_id = $${params.length}`);
+  }
+
+  const res = await query<any>(`
+    SELECT 
+      ot.id,
+      ot.transfer_number,
+      ot.from_outlet_id,
+      from_o.name AS from_outlet_name,
+      ot.to_outlet_id,
+      to_o.name AS to_outlet_name,
+      ot.status,
+      ot.notes,
+      ot.total_cost,
+      ot.approved_at,
+      ot.created_at,
+      ot.received_at,
+      ot.proof_image_url,
+      u.name AS requested_by_name,
+      appr.name AS approved_by_name,
+      COUNT(ti.id)::int AS item_count
+    FROM outlet_transfers ot
+    JOIN outlets from_o ON from_o.id = ot.from_outlet_id
+    JOIN outlets to_o ON to_o.id = ot.to_outlet_id
+    LEFT JOIN users u ON u.id = ot.requested_by
+    LEFT JOIN users appr ON appr.id = ot.approved_by
+    LEFT JOIN outlet_transfer_items ti ON ti.transfer_id = ot.id
+    WHERE ${conditions.join(' AND ')}
+    GROUP BY ot.id, from_o.name, to_o.name, u.name, appr.name
+    ORDER BY 
+      CASE WHEN ot.status = 'APPROVED' THEN 0 ELSE 1 END,
+      COALESCE(ot.approved_at, ot.created_at) DESC,
+      ot.id DESC
+  `, params);
+  return res.rows;
+}
+
+export interface ReceiveTransferItemInput {
+  transfer_item_id?: number;
+  item_id: number;
+  received_qty: number;
+  issue_reason?: string;
+  issue_photo_url?: string;
+}
+
+/**
+ * Konfirmasi penerimaan barang oleh Outlet Penerima (Atomic Execution: Potong Asal, Tambah Tujuan, Mutasi HPP & Catat Tiket Masalah jika ada selisih)
+ */
+export async function completeOutletTransfer(
+  transferId: number,
+  receiptData?: {
+    received_items?: ReceiveTransferItemInput[];
+    proof_image_url?: string;
+  }
+): Promise<boolean> {
+  await ensureTransferIssuesTable();
   return await withTransaction(async (client) => {
     // 1. Ambil data transfer
     const tRes = await client.query(`
-      SELECT id, transfer_number, from_outlet_id, to_outlet_id, status, total_cost
+      SELECT id, transfer_number, from_outlet_id, to_outlet_id, status, total_cost, notes
       FROM outlet_transfers
       WHERE id = $1 FOR UPDATE
     `, [transferId]);
@@ -671,12 +770,47 @@ export async function completeOutletTransfer(transferId: number): Promise<boolea
       WHERE ti.transfer_id = $1
     `, [transferId]);
 
+    const receiptMap = new Map<number, ReceiveTransferItemInput>();
+    if (receiptData?.received_items) {
+      for (const it of receiptData.received_items) {
+        if (it.transfer_item_id) receiptMap.set(Number(it.transfer_item_id), it);
+        else receiptMap.set(Number(it.item_id), it);
+      }
+    }
+
     for (const it of itemsRes.rows) {
       const convRatio = Number(it.conversion_ratio) || 1;
       const isPurchaseUnit = it.unit.toLowerCase() === (it.purchase_unit || '').toLowerCase();
-      const qtyInSmallest = isPurchaseUnit ? Number(it.requested_qty) * convRatio : Number(it.requested_qty);
+      
+      const requestedQty = Number(it.requested_qty);
+      const itemReceipt = receiptMap.get(Number(it.id)) || receiptMap.get(Number(it.item_id));
+      
+      const receivedQty = itemReceipt !== undefined ? Math.max(0, Number(itemReceipt.received_qty)) : requestedQty;
+      const issueQty = Math.max(0, requestedQty - receivedQty);
 
-      // A. POTONG STOK DI OUTLET ASAL (from_outlet_id)
+      // Update received_qty di tabel outlet_transfer_items
+      await client.query(`
+        UPDATE outlet_transfer_items
+        SET received_qty = $1
+        WHERE id = $2
+      `, [receivedQty, it.id]);
+
+      // Jika ada selisih (barang kurang / rusak), catat ke tabel outlet_transfer_issues
+      if (issueQty > 0) {
+        const reason = itemReceipt?.issue_reason || 'Barang Rusak / Hilang saat Pengiriman Mutasi';
+        const photoUrl = itemReceipt?.issue_photo_url || receiptData?.proof_image_url || null;
+
+        await client.query(`
+          INSERT INTO outlet_transfer_issues (
+            transfer_id, transfer_item_id, qty_issue, reason, photo_url, status, reported_at
+          ) VALUES ($1, $2, $3, $4, $5, 'PENDING', NOW())
+        `, [transferId, it.id, issueQty, reason, photoUrl]);
+      }
+
+      const qtySentInSmallest = isPurchaseUnit ? requestedQty * convRatio : requestedQty;
+      const qtyReceivedInSmallest = isPurchaseUnit ? receivedQty * convRatio : receivedQty;
+
+      // A. POTONG STOK DI OUTLET ASAL (from_outlet_id) Penuh sesuai yang dikirim
       const fromStockRes = await client.query(`
         SELECT current_balance FROM outlet_stocks
         WHERE outlet_id = $1 AND item_id = $2
@@ -684,7 +818,7 @@ export async function completeOutletTransfer(transferId: number): Promise<boolea
       `, [transfer.from_outlet_id, it.item_id]);
 
       const fromOldBal = fromStockRes.rows.length > 0 ? Number(fromStockRes.rows[0].current_balance) : 0;
-      const fromNewBal = fromOldBal - qtyInSmallest;
+      const fromNewBal = fromOldBal - qtySentInSmallest;
 
       await client.query(`
         INSERT INTO outlet_stocks (outlet_id, item_id, current_balance, updated_at)
@@ -698,41 +832,75 @@ export async function completeOutletTransfer(transferId: number): Promise<boolea
         INSERT INTO outlet_inventory_logs (
           outlet_id, item_id, movement_type, qty_change, ending_balance, reference_type, reference_id, created_at
         ) VALUES ($1, $2, 'TRANSFER_OUT', $3, $4, 'OUTLET_TRANSFER', $5, NOW())
-      `, [transfer.from_outlet_id, it.item_id, -qtyInSmallest, fromNewBal, transferId]);
+      `, [transfer.from_outlet_id, it.item_id, -qtySentInSmallest, fromNewBal, transferId]);
 
-      // B. TAMBAH STOK DI OUTLET TUJUAN (to_outlet_id)
-      const toStockRes = await client.query(`
-        SELECT current_balance FROM outlet_stocks
-        WHERE outlet_id = $1 AND item_id = $2
-        FOR UPDATE
-      `, [transfer.to_outlet_id, it.item_id]);
+      // B. TAMBAH STOK DI OUTLET TUJUAN (to_outlet_id) Sejumlah riil yang diterima
+      if (qtyReceivedInSmallest > 0) {
+        const toStockRes = await client.query(`
+          SELECT current_balance FROM outlet_stocks
+          WHERE outlet_id = $1 AND item_id = $2
+          FOR UPDATE
+        `, [transfer.to_outlet_id, it.item_id]);
 
-      const toOldBal = toStockRes.rows.length > 0 ? Number(toStockRes.rows[0].current_balance) : 0;
-      const toNewBal = toOldBal + qtyInSmallest;
+        const toOldBal = toStockRes.rows.length > 0 ? Number(toStockRes.rows[0].current_balance) : 0;
+        const toNewBal = toOldBal + qtyReceivedInSmallest;
 
-      await client.query(`
-        INSERT INTO outlet_stocks (outlet_id, item_id, current_balance, updated_at)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (outlet_id, item_id)
-        DO UPDATE SET current_balance = $3, updated_at = NOW()
-      `, [transfer.to_outlet_id, it.item_id, toNewBal]);
+        await client.query(`
+          INSERT INTO outlet_stocks (outlet_id, item_id, current_balance, updated_at)
+          VALUES ($1, $2, $3, NOW())
+          ON CONFLICT (outlet_id, item_id)
+          DO UPDATE SET current_balance = $3, updated_at = NOW()
+        `, [transfer.to_outlet_id, it.item_id, toNewBal]);
 
-      // Catat log inventori IN pada outlet tujuan
-      await client.query(`
-        INSERT INTO outlet_inventory_logs (
-          outlet_id, item_id, movement_type, qty_change, ending_balance, reference_type, reference_id, created_at
-        ) VALUES ($1, $2, 'TRANSFER_IN', $3, $4, 'OUTLET_TRANSFER', $5, NOW())
-      `, [transfer.to_outlet_id, it.item_id, qtyInSmallest, toNewBal, transferId]);
+        // Catat log inventori IN pada outlet tujuan
+        await client.query(`
+          INSERT INTO outlet_inventory_logs (
+            outlet_id, item_id, movement_type, qty_change, ending_balance, reference_type, reference_id, created_at
+          ) VALUES ($1, $2, 'TRANSFER_IN', $3, $4, 'OUTLET_TRANSFER', $5, NOW())
+        `, [transfer.to_outlet_id, it.item_id, qtyReceivedInSmallest, toNewBal, transferId]);
+      }
     }
 
     // 3. Update status mutasi menjadi COMPLETED
     await client.query(`
       UPDATE outlet_transfers
       SET status = 'COMPLETED',
+          proof_image_url = $2,
           received_at = NOW()
       WHERE id = $1
-    `, [transferId]);
+    `, [transferId, receiptData?.proof_image_url || null]);
 
     return true;
   });
 }
+
+/**
+ * Count of pending transfer requests needing Admin approval / allocation
+ */
+export async function getPendingTransfersCount(since?: string | null): Promise<number> {
+  const conditions: string[] = ["status = 'PENDING_APPROVAL'"];
+  const params: any[] = [];
+  if (since) {
+    params.push(new Date(Number(since)).toISOString());
+    conditions.push(`created_at > $${params.length}`);
+  }
+  const sql = `SELECT COUNT(*)::text AS count FROM outlet_transfers WHERE ${conditions.join(' AND ')}`;
+  const res = await query<{ count: string }>(sql, params);
+  return parseInt(res.rows[0]?.count || '0', 10);
+}
+
+/**
+ * Count of approved transfers waiting to be received by a specific outlet
+ */
+export async function getPendingReceivingTransfersCount(outletId: number, since?: string | null): Promise<number> {
+  const conditions: string[] = ["status = 'APPROVED'", "to_outlet_id = $1"];
+  const params: any[] = [outletId];
+  if (since) {
+    params.push(new Date(Number(since)).toISOString());
+    conditions.push(`approved_at > $${params.length}`);
+  }
+  const sql = `SELECT COUNT(*)::text AS count FROM outlet_transfers WHERE ${conditions.join(' AND ')}`;
+  const res = await query<{ count: string }>(sql, params);
+  return parseInt(res.rows[0]?.count || '0', 10);
+}
+

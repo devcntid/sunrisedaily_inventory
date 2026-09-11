@@ -32,7 +32,20 @@ export async function POST(
       }
     }
 
-    await completeOutletTransfer(transferId);
+    let receiptData;
+    try {
+      const body = await request.json();
+      if (body && typeof body === 'object') {
+        receiptData = {
+          received_items: body.received_items,
+          proof_image_url: body.proof_image_url,
+        };
+      }
+    } catch {
+      // Body might be empty, which is fine
+    }
+
+    await completeOutletTransfer(transferId, receiptData);
 
     return NextResponse.json({
       success: true,

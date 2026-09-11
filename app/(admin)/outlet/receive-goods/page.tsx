@@ -1,7 +1,6 @@
 'use client';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PackageMinus, ShieldAlert, FileQuestion } from 'lucide-react';
-import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
@@ -10,10 +9,15 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Toast } from '@/components/ui/Toast';
 import { Select } from '@/components/ui/Select';
+import { ArrowRight, ArrowLeftRight, Truck, CheckCircle2, AlertTriangle, Upload, Eye } from 'lucide-react';
 
 interface DeliveryNote {
-  id: number; delivery_note_number: string; status: string;
-  order_id: number; delivery_date: string; driver_name: string;
+  id: number;
+  delivery_note_number: string;
+  status: string;
+  order_id: number;
+  delivery_date: string;
+  driver_name: string;
   proof_image_url?: string;
 }
 
@@ -32,6 +36,41 @@ interface DeliveryNoteItem {
   discrepancy_reason?: string | null;
 }
 
+interface OutletTransferSummary {
+  id: number;
+  transfer_number: string;
+  from_outlet_id: number | null;
+  from_outlet_name: string | null;
+  to_outlet_id: number;
+  to_outlet_name: string;
+  status: string;
+  notes: string | null;
+  total_cost: number;
+  approved_at: string | null;
+  created_at: string;
+  received_at?: string | null;
+  proof_image_url?: string | null;
+  requested_by_name: string | null;
+  approved_by_name: string | null;
+  item_count: number;
+}
+
+interface OutletTransferItemDetail {
+  id: number;
+  transfer_id: number;
+  item_id: number;
+  item_name: string;
+  requested_qty: number;
+  received_qty: number;
+  unit: string;
+  cost_per_unit: number;
+  subtotal_cost: number;
+  smallest_unit?: string;
+  purchase_unit?: string;
+  conversion_ratio?: number;
+  discrepancy_reason?: string | null;
+  issue_photo_url?: string | null;
+}
 
 export default function ReceiveGoodsPage() {
   const searchParams = useSearchParams();
@@ -39,112 +78,155 @@ export default function ReceiveGoodsPage() {
   const scanParam = searchParams.get('scan');
   const [initialScanHandled, setInitialScanHandled] = useState(false);
 
+  // Active Tab: 'CENTRAL_DO' (Surat Jalan Gudang Pusat) vs 'OUTLET_TRANSFER' (Mutasi Antar Outlet)
+  const [activeTab, setActiveTab] = useState<'CENTRAL_DO' | 'OUTLET_TRANSFER'>('CENTRAL_DO');
+
+  // Delivery Notes (Central DO) state
   const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingNotes, setLoadingNotes] = useState(true);
   const [scanModal, setScanModal] = useState<DeliveryNote | null>(null);
-
-  const [toast, setToast] = useState<{ isOpen: boolean; message: string; type: 'success' | 'error' | 'info' }>({ isOpen: false, message: '', type: 'info' });
   const [itemsList, setItemsList] = useState<DeliveryNoteItem[]>([]);
-
-  // Row states
   const [qtys, setQtys] = useState<Record<number, number | ''>>({});
-  const [reasons, setReasons] = useState<Record<number, string>>({});
   const [discNotes, setDiscNotes] = useState<Record<number, string>>({});
   const [discCategories, setDiscCategories] = useState<Record<number, string>>({});
 
-  // Finalization states
+  // Outlet Transfers state
+  const [transfers, setTransfers] = useState<OutletTransferSummary[]>([]);
+  const [loadingTransfers, setLoadingTransfers] = useState(true);
+  const [transferModal, setTransferModal] = useState<OutletTransferSummary | null>(null);
+  const [transferItemsList, setTransferItemsList] = useState<OutletTransferItemDetail[]>([]);
+  const [transferQtys, setTransferQtys] = useState<Record<number, number | ''>>({});
+  const [transferDiscCategories, setTransferDiscCategories] = useState<Record<number, string>>({});
+  const [transferDiscNotes, setTransferDiscNotes] = useState<Record<number, string>>({});
+
+  // General & Upload states
+  const [toast, setToast] = useState<{ isOpen: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    isOpen: false,
+    message: '',
+    type: 'info',
+  });
   const [processing, setProcessing] = useState(false);
   const [proofImage, setProofImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState(false);
+  const [requireBarcode, setRequireBarcode] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const transferFileInputRef = useRef<HTMLInputElement>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ isOpen: true, message, type });
+  };
+  const hideToast = () => setToast(prev => ({ ...prev, isOpen: false }));
 
   function handlePhotoChange(file: File | undefined) {
     if (!file) return;
-    
     if (file.size > 5 * 1024 * 1024) {
-      setToast({ isOpen: true, message: 'Ukuran foto terlalu besar. Maksimal 5 MB.', type: 'error' });
-      // Reset input
+      showToast('Ukuran foto terlalu besar. Maksimal 5 MB.', 'error');
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (transferFileInputRef.current) transferFileInputRef.current.value = '';
       return;
     }
-    
     setProofImage(file);
     setPreviewUrl(URL.createObjectURL(file));
   }
 
-  const [requireBarcode, setRequireBarcode] = useState(true);
-
+  // Fetch Delivery Notes from Central Warehouse
   const fetchNotes = useCallback(async (isQuiet = false) => {
-    if (!isQuiet) setLoading(true);
+    if (!isQuiet) setLoadingNotes(true);
     try {
       const [res, setRes] = await Promise.all([
-        fetch(`/api/delivery-notes`, { cache: 'no-store' }),
-        fetch('/api/settings', { cache: 'no-store' })
+        fetch('/api/delivery-notes', { cache: 'no-store' }),
+        fetch('/api/settings', { cache: 'no-store' }),
       ]);
       if (res.ok) {
         const data = await res.json();
         const allowed = (data.data ?? []).filter((d: DeliveryNote) => d.status === 'DIKIRIM' || d.status === 'DITERIMA' || d.status === 'DRAFT');
         setDeliveryNotes(allowed);
       }
-
       if (setRes.ok) {
         const setData = await setRes.json();
         setRequireBarcode(setData.data?.require_barcode_scan !== 'false');
       }
-    } catch (err) {
+    } catch {
+      // ignore
     } finally {
-      if (!isQuiet) setLoading(false);
+      if (!isQuiet) setLoadingNotes(false);
     }
   }, []);
 
-  useEffect(() => { 
+  // Fetch Approved Transfers for Receiving
+  const fetchTransfers = useCallback(async (isQuiet = false) => {
+    if (!isQuiet) setLoadingTransfers(true);
+    try {
+      const res = await fetch('/api/outlet/transfers/pending-receipt', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTransfers(data.data || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      if (!isQuiet) setLoadingTransfers(false);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchNotes(false);
+    fetchTransfers(false);
+
     const interval = setInterval(() => {
       fetchNotes(true);
-    }, 3000);
+      fetchTransfers(true);
+    }, 5000);
+
     const handleFocus = () => {
       fetchNotes(true);
+      fetchTransfers(true);
     };
     window.addEventListener('focus', handleFocus);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [fetchNotes]);
+  }, [fetchNotes, fetchTransfers]);
 
+  // Handle URL barcode scan parameter
   useEffect(() => {
     if (deliveryNotes.length > 0 && scanParam && !initialScanHandled) {
       const dn = deliveryNotes.find(d => d.delivery_note_number === scanParam);
       if (dn) {
         openScan(dn);
       } else {
-        setToast({ isOpen: true, message: `Surat Jalan ${scanParam} tidak ditemukan.`, type: 'error' });
+        showToast(`Surat Jalan ${scanParam} tidak ditemukan.`, 'error');
       }
       setInitialScanHandled(true);
-      // Remove query param from url
       router.replace('/outlet/receive-goods');
     }
   }, [deliveryNotes, scanParam, initialScanHandled, router]);
 
+  // Central DO receipt modal handlers
   async function openScan(dn: DeliveryNote) {
     if (dn.status === 'DRAFT') {
-      setToast({ isOpen: true, message: 'Pesanan masih diproses', type: 'info' });
+      showToast('Pesanan masih diproses pusat', 'info');
       return;
     }
 
     setScanModal(dn);
-    setToast({ ...toast, isOpen: false });
+    hideToast();
     setProofImage(null);
     setPreviewUrl(dn.proof_image_url || null);
     setQtys({});
-    setReasons({});
     setDiscNotes({});
     setDiscCategories({});
 
-    const res = await fetch(`/api/delivery-notes/${dn.id}`);
-    const data = await res.json();
-    setItemsList(data.data?.items ?? []);
+    try {
+      const res = await fetch(`/api/delivery-notes/${dn.id}`);
+      const data = await res.json();
+      setItemsList(data.data?.items ?? []);
+    } catch {
+      showToast('Gagal memuat rincian item surat jalan.', 'error');
+    }
   }
 
   async function handleCompleteReceipt(e: React.FormEvent) {
@@ -152,7 +234,7 @@ export default function ReceiveGoodsPage() {
     if (!scanModal) return;
 
     if (requireBarcode && !proofImage && !previewUrl) {
-      setToast({ isOpen: true, message: 'Foto bukti penerimaan wajib diunggah.', type: 'error' });
+      showToast('Foto bukti penerimaan wajib diunggah.', 'error');
       return;
     }
 
@@ -162,7 +244,7 @@ export default function ReceiveGoodsPage() {
 
       const inputQty = qtys[item.id];
       if (inputQty === undefined || inputQty === '' || inputQty < 0) {
-        setToast({ isOpen: true, message: `Harap masukkan Kuantitas Aktual untuk ${item.item_name}.`, type: 'error' });
+        showToast(`Harap masukkan Kuantitas Aktual untuk ${item.item_name}.`, 'error');
         return;
       }
 
@@ -174,18 +256,18 @@ export default function ReceiveGoodsPage() {
 
       if (isDiscrepancy) {
         if (!categoryStr) {
-          setToast({ isOpen: true, message: `Jenis masalah wajib dipilih untuk ${item.item_name}.`, type: 'error' });
+          showToast(`Jenis masalah wajib dipilih untuk ${item.item_name}.`, 'error');
           return;
         }
         if (categoryStr === 'Lainnya' && !notesStr.trim()) {
-          setToast({ isOpen: true, message: `Alasan selisih wajib diisi untuk ${item.item_name} jika memilih 'Lainnya'.`, type: 'error' });
+          showToast(`Alasan selisih wajib diisi untuk ${item.item_name} jika memilih 'Lainnya'.`, 'error');
           return;
         }
       }
     }
 
     setProcessing(true);
-    setToast({ ...toast, isOpen: false });
+    hideToast();
     try {
       const itemsToScan = itemsList
         .filter(item => !item.scanned_in_at)
@@ -216,19 +298,17 @@ export default function ReceiveGoodsPage() {
       }
 
       let uploadedUrl = '';
-      // Upload photo
       if (proofImage) {
         const formData = new FormData();
         formData.append('file', proofImage);
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
         const uploadData = await uploadRes.json();
         if (!uploadData.success) {
-          throw new Error('Gagal mengupload foto bukti.');
+          throw new Error(uploadData.message || 'Gagal mengupload foto bukti.');
         }
         uploadedUrl = uploadData.url;
       }
 
-      // Finalize the DO
       const confirmRes = await fetch(`/api/delivery-notes/${scanModal.id}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,25 +316,19 @@ export default function ReceiveGoodsPage() {
       });
       const confirmData = await confirmRes.json();
       if (!confirmData.success) {
-        setToast({ isOpen: true, message: `Error menyelesaikan: ${confirmData.message}`, type: 'error' });
+        showToast(`Error menyelesaikan: ${confirmData.message}`, 'error');
         return;
       }
 
       setScanModal(null);
-      setToast({ isOpen: true, message: 'Surat Jalan diterima dan diselesaikan!', type: 'success' });
+      showToast('Surat Jalan diterima dan diselesaikan!', 'success');
       fetchNotes();
     } catch (e: unknown) {
-      if (e instanceof Error) {
-        setToast({ isOpen: true, message: e.message, type: 'error' });
-      } else {
-        setToast({ isOpen: true, message: 'An unknown error occurred', type: 'error' });
-      }
+      showToast(e instanceof Error ? e.message : 'Terjadi kesalahan sistem.', 'error');
     } finally {
       setProcessing(false);
     }
   }
-
-  const allScannedIn = itemsList.length > 0 && itemsList.every(i => i.scanned_in_at);
 
   const handleFillAll = () => {
     const newQtys = { ...qtys };
@@ -267,70 +341,368 @@ export default function ReceiveGoodsPage() {
     setQtys(newQtys);
   };
 
+  // Outlet Transfer receiving modal handlers
+  async function openTransferModal(tr: OutletTransferSummary) {
+    setTransferModal(tr);
+    hideToast();
+    setProofImage(null);
+    setPreviewUrl(tr.proof_image_url || null);
+    setTransferQtys({});
+    setTransferDiscCategories({});
+    setTransferDiscNotes({});
+
+    try {
+      const res = await fetch(`/api/outlet/transfers/${tr.id}`);
+      const data = await res.json();
+      if (data.success && data.data?.items) {
+        setTransferItemsList(data.data.items);
+        if (data.data.transfer?.proof_image_url) {
+          setPreviewUrl(data.data.transfer.proof_image_url);
+        }
+      } else {
+        setTransferItemsList([]);
+      }
+    } catch {
+      showToast('Gagal memuat rincian item mutasi.', 'error');
+    }
+  }
+
+  const handleTransferFillAll = () => {
+    const newQtys = { ...transferQtys };
+    transferItemsList.forEach(item => {
+      newQtys[item.id] = Number(item.requested_qty);
+    });
+    setTransferQtys(newQtys);
+  };
+
+  async function handleCompleteTransferReceipt(e: React.FormEvent) {
+    e.preventDefault();
+    if (!transferModal) return;
+
+    // Validate inputs
+    for (const item of transferItemsList) {
+      const inputQty = transferQtys[item.id];
+      if (inputQty === undefined || inputQty === '' || inputQty < 0) {
+        showToast(`Harap masukkan Jumlah Diterima untuk ${item.item_name}.`, 'error');
+        return;
+      }
+
+      const receivedQtyNum = Number(inputQty);
+      const requestedQtyNum = Number(item.requested_qty);
+
+      if (receivedQtyNum > requestedQtyNum) {
+        showToast(`Jumlah diterima untuk ${item.item_name} tidak boleh melebihi jumlah kirim (${requestedQtyNum} ${item.unit}).`, 'error');
+        return;
+      }
+
+      const isDiscrepancy = receivedQtyNum < requestedQtyNum;
+      const categoryStr = transferDiscCategories[item.id] || '';
+      const notesStr = transferDiscNotes[item.id] || '';
+
+      if (isDiscrepancy) {
+        if (!categoryStr) {
+          showToast(`Jenis masalah/alasan selisih wajib dipilih untuk ${item.item_name}.`, 'error');
+          return;
+        }
+        if (categoryStr === 'Lainnya' && !notesStr.trim()) {
+          showToast(`Detail alasan wajib diisi untuk ${item.item_name} jika memilih 'Lainnya'.`, 'error');
+          return;
+        }
+      }
+    }
+
+    setProcessing(true);
+    hideToast();
+    try {
+      let uploadedUrl = '';
+      if (proofImage) {
+        const formData = new FormData();
+        formData.append('file', proofImage);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (!uploadData.success) {
+          throw new Error(uploadData.message || 'Gagal mengunggah foto bukti penerimaan mutasi.');
+        }
+        uploadedUrl = uploadData.url;
+      }
+
+      const receivedItemsPayload = transferItemsList.map(item => {
+        const inputQty = Number(transferQtys[item.id]);
+        const requestedQtyNum = Number(item.requested_qty);
+        const isDiscrepancy = inputQty < requestedQtyNum;
+        const categoryStr = transferDiscCategories[item.id] || '';
+        const notesStr = transferDiscNotes[item.id] || '';
+
+        const reason = isDiscrepancy
+          ? (categoryStr === 'Lainnya' ? notesStr.trim() : categoryStr)
+          : undefined;
+
+        return {
+          transfer_item_id: item.id,
+          item_id: item.item_id,
+          received_qty: inputQty,
+          issue_reason: reason,
+          issue_photo_url: uploadedUrl || undefined,
+        };
+      });
+
+      const res = await fetch(`/api/outlet/transfers/${transferModal.id}/receive`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          received_items: receivedItemsPayload,
+          proof_image_url: uploadedUrl || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Gagal mengonfirmasi penerimaan mutasi.');
+      }
+
+      setTransferModal(null);
+      showToast('Penerimaan mutasi barang berhasil dikonfirmasi! Stok dan log telah diperbarui.', 'success');
+      fetchTransfers();
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Terjadi kesalahan sistem.', 'error');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  const allScannedIn = itemsList.length > 0 && itemsList.every(i => i.scanned_in_at);
+  const pendingNotesCount = deliveryNotes.filter(d => d.status === 'DIKIRIM').length;
+  const pendingTransfersCount = transfers.filter(t => t.status === 'APPROVED').length;
+
   return (
     <section className="screen">
       <div className="card">
-        <div className="card-head">
-          <div>
-            <h3>Penerimaan Barang</h3>
+        {/* Header with Title and Tabs */}
+        <div style={{ borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '16px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Penerimaan Barang</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--muted)' }}>
+                Periksa dan terima kiriman dari Gudang Pusat maupun Mutasi Antar Outlet Cabang.
+              </p>
+            </div>
+          </div>
+
+          {/* 2-Tab Navigation */}
+          <div style={{ display: 'flex', padding: '0 20px', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('CENTRAL_DO')}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'CENTRAL_DO' ? '2px solid var(--primary)' : '2px solid transparent',
+                padding: '12px 14px',
+                fontSize: 13,
+                fontWeight: activeTab === 'CENTRAL_DO' ? 700 : 500,
+                color: activeTab === 'CENTRAL_DO' ? 'var(--primary)' : 'var(--muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Truck size={16} />
+              <span>Kiriman Gudang Pusat</span>
+              {pendingNotesCount > 0 && (
+                <span style={{
+                  background: '#016e3f',
+                  color: '#ffffff',
+                  borderRadius: 99,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1,
+                }}>
+                  {pendingNotesCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('OUTLET_TRANSFER')}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'OUTLET_TRANSFER' ? '2px solid var(--primary)' : '2px solid transparent',
+                padding: '12px 14px',
+                fontSize: 13,
+                fontWeight: activeTab === 'OUTLET_TRANSFER' ? 700 : 500,
+                color: activeTab === 'OUTLET_TRANSFER' ? 'var(--primary)' : 'var(--muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <ArrowLeftRight size={16} />
+              <span>Mutasi Antar Outlet</span>
+              {pendingTransfersCount > 0 && (
+                <span style={{
+                  background: '#016e3f',
+                  color: '#ffffff',
+                  borderRadius: 99,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  lineHeight: 1,
+                }}>
+                  {pendingTransfersCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
-        <div className="card-body flush">
-          {loading ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Memuat Surat Jalan...</div> : deliveryNotes.length === 0 ? (
-            <div className="empty-state">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M1 3h15v13H1z M16 8h4l3 3v5h-7V8z" /></svg>
-              <h4>Belum ada pengiriman</h4>
-              <p>Belum ada Surat Jalan dengan status DIKIRIM untuk outlet Anda</p>
-            </div>
-          ) : (
-            <Table>
-              <thead>
-                <tr>
-                  <th>No. Surat Jalan</th>
-                  <th>No. Ref PO</th>
-                  <th>Tanggal Kirim</th>
-                  <th>Sopir</th>
-                  <th className="center">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deliveryNotes.map(dn => (
-                  <tr key={dn.id} onClick={() => openScan(dn)} className="hover-row" style={{ cursor: 'pointer' }}>
-                    <td className="font-mono text-primary font-bold">{dn.delivery_note_number}</td>
-                    <td className="font-mono font-bold">
-                      {dn.order_id 
-                        ? `PO-${new Date(dn.delivery_date).getFullYear()}-${String(dn.order_id).padStart(5, '0')}`
-                        : `PO-${new Date(dn.delivery_date).getFullYear()}-DIR${String(dn.id).padStart(3, '0')}`}
-                    </td>
-                    <td>{new Date(dn.delivery_date).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                    <td className="muted">{dn.driver_name || '-'}</td>
-                    <td className="center">
-                      <Badge variant={dn.status === 'DITERIMA' ? 'green' : dn.status === 'DRAFT' ? 'gray' : 'amber'}>
-                        {dn.status === 'DITERIMA' ? 'Diterima' : dn.status === 'DIKIRIM' ? 'Dikirim' : dn.status === 'DRAFT' ? 'Diproses Pusat' : dn.status}
-                      </Badge>
-                    </td>
+
+        {/* Tab 1: Kiriman Gudang Pusat */}
+        {activeTab === 'CENTRAL_DO' && (
+          <div className="card-body flush">
+            {loadingNotes ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Memuat Surat Jalan...</div>
+            ) : deliveryNotes.length === 0 ? (
+              <div className="empty-state" style={{ padding: '48px 20px', textAlign: 'center' }}>
+                <Truck size={36} style={{ color: 'var(--muted)', marginBottom: 12, opacity: 0.6 }} />
+                <h4 style={{ margin: '0 0 6px' }}>Belum ada pengiriman dari Pusat</h4>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+                  Belum ada Surat Jalan aktif dengan status DIKIRIM untuk outlet Anda.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>No. Surat Jalan</th>
+                    <th>No. Ref PO</th>
+                    <th>Tanggal Kirim</th>
+                    <th>Sopir</th>
+                    <th className="center">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </Table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {deliveryNotes.map(dn => (
+                    <tr key={dn.id} onClick={() => openScan(dn)} className="hover-row" style={{ cursor: 'pointer' }}>
+                      <td className="font-mono text-primary font-bold">{dn.delivery_note_number}</td>
+                      <td className="font-mono font-bold">
+                        {dn.order_id
+                          ? `PO-${new Date(dn.delivery_date).getFullYear()}-${String(dn.order_id).padStart(5, '0')}`
+                          : `PO-${new Date(dn.delivery_date).getFullYear()}-DIR${String(dn.id).padStart(3, '0')}`}
+                      </td>
+                      <td>{new Date(dn.delivery_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td className="muted">{dn.driver_name || '-'}</td>
+                      <td className="center">
+                        <Badge variant={dn.status === 'DITERIMA' ? 'green' : dn.status === 'DRAFT' ? 'gray' : 'amber'}>
+                          {dn.status === 'DITERIMA' ? 'Diterima' : dn.status === 'DIKIRIM' ? 'Dikirim' : dn.status === 'DRAFT' ? 'Diproses Pusat' : dn.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: Mutasi Antar Outlet */}
+        {activeTab === 'OUTLET_TRANSFER' && (
+          <div className="card-body flush">
+            {loadingTransfers ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>Memuat data mutasi masuk...</div>
+            ) : transfers.length === 0 ? (
+              <div className="empty-state" style={{ padding: '48px 20px', textAlign: 'center' }}>
+                <ArrowLeftRight size={36} style={{ color: 'var(--muted)', marginBottom: 12, opacity: 0.6 }} />
+                <h4 style={{ margin: '0 0 6px' }}>Belum ada mutasi masuk</h4>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--muted)' }}>
+                  Tidak ada kiriman mutasi barang antar outlet yang menunggu penerimaan atau riwayat saat ini.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>No. Mutasi</th>
+                    <th>Dari Outlet</th>
+                    <th>Tanggal Kirim</th>
+                    <th className="center">Total Barang</th>
+                    <th className="center">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transfers.map(tr => {
+                    const tgl = tr.approved_at || tr.created_at;
+                    const isReceived = tr.status === 'COMPLETED';
+
+                    return (
+                      <tr key={tr.id} className="hover-row" style={{ cursor: 'pointer' }} onClick={() => openTransferModal(tr)}>
+                        <td className="font-mono text-primary font-bold">{tr.transfer_number}</td>
+                        <td>
+                          <div style={{ fontWeight: 600, fontSize: 13 }}>{tr.from_outlet_name || 'Outlet Asal'}</div>
+                        </td>
+                        <td>
+                          {tgl ? (
+                            new Date(tgl).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+                          ) : (
+                            <span style={{ fontSize: 12, color: 'var(--muted)' }}>-</span>
+                          )}
+                        </td>
+                        <td className="center num font-bold">{tr.item_count || 1} jenis</td>
+                        <td className="center">
+                          <Badge variant={isReceived ? 'green' : 'amber'}>
+                            {isReceived ? 'Diterima' : 'Dikirim'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        )}
       </div>
 
-      <Modal isOpen={!!scanModal} onClose={() => setScanModal(null)} title={`Terima Barang - ${scanModal?.delivery_note_number}`} maxWidth={900} closeOnOutsideClick={false}>
+      {/* Modal 1: Penerimaan Surat Jalan Gudang Pusat */}
+      <Modal
+        isOpen={!!scanModal}
+        onClose={() => setScanModal(null)}
+        title={`Terima Kiriman Pusat - ${scanModal?.delivery_note_number}`}
+        maxWidth={900}
+        closeOnOutsideClick={false}
+      >
         <div className="modal-body" style={{ padding: '16px 20px' }}>
-
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {scanModal?.status !== 'DITERIMA' && (
                   <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} style={{ whiteSpace: 'nowrap' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                    <Upload size={14} style={{ marginRight: 6 }} />
                     {proofImage || previewUrl ? 'Ubah Foto' : 'Unggah Foto'}
                   </Button>
                 )}
                 {scanModal?.status !== 'DITERIMA' && (
-                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" capture="environment" onChange={e => handlePhotoChange(e.target.files?.[0])} />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/*"
+                    capture="environment"
+                    onChange={e => handlePhotoChange(e.target.files?.[0])}
+                  />
                 )}
                 {previewUrl && (
                   <img
@@ -362,7 +734,15 @@ export default function ReceiveGoodsPage() {
 
           <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 24, overflowX: 'auto' }}>
             <Table>
-              <thead><tr><th>Data Barang</th><th className="center">Jml Dikirim</th><th>Jml Diterima</th><th>Selisih</th><th className="center">Status</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Data Barang</th>
+                  <th className="center">Jml Dikirim</th>
+                  <th>Jml Diterima</th>
+                  <th>Selisih</th>
+                  <th className="center">Status</th>
+                </tr>
+              </thead>
               <tbody>
                 {itemsList.map(item => {
                   const conversionRatio = Number(item.conversion_ratio) || 1;
@@ -374,31 +754,28 @@ export default function ReceiveGoodsPage() {
                     const receivedDisplay = item.qty_received != null ? Number(item.qty_received) / conversionRatio : null;
                     return (
                       <tr key={item.id}>
-                        <td className="font-bold">
-                          {item.item_name}
-                        </td>
-                        <td className="center num">{qtyShippedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} {unitDisplay}</td>
+                        <td className="font-bold">{item.item_name}</td>
+                        <td className="center num">{qtyShippedDisplay.toLocaleString('id-ID', { maximumFractionDigits: 3 })} {unitDisplay}</td>
                         <td className="center num font-bold" style={{ color: item.qty_received != null && Number(item.qty_received) !== Number(item.qty_shipped) ? 'var(--danger)' : 'inherit' }}>
-                          {receivedDisplay != null ? `${receivedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} ${unitDisplay}` : '-'}
+                          {receivedDisplay != null ? `${receivedDisplay.toLocaleString('id-ID', { maximumFractionDigits: 3 })} ${unitDisplay}` : '-'}
                         </td>
                         <td>
                           {item.discrepancy_reason ? (
-                            <div style={{ fontSize: 12, color: 'var(--danger)', lineHeight: 1.3 }}>
-                              {item.discrepancy_reason}
-                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--danger)', lineHeight: 1.3 }}>{item.discrepancy_reason}</div>
                           ) : (
                             <span className="muted" style={{ fontSize: 12 }}>-</span>
                           )}
                         </td>
                         <td className="center">
-                          <Badge variant="green">Diterima</Badge>
+                          <Badge variant={item.qty_received != null && Number(item.qty_received) !== Number(item.qty_shipped) ? 'amber' : 'green'}>
+                            {item.qty_received != null && Number(item.qty_received) !== Number(item.qty_shipped) ? 'Ada Selisih' : 'Selesai'}
+                          </Badge>
                         </td>
                       </tr>
                     );
                   }
 
                   const inputQty = qtys[item.id] !== undefined ? qtys[item.id] : '';
-                  const isDiscrepancy = inputQty !== '' && Number(inputQty) !== qtyShippedDisplay;
 
                   return (
                     <tr key={item.id}>
@@ -406,7 +783,7 @@ export default function ReceiveGoodsPage() {
                         <div className="font-bold">{item.item_name}</div>
                       </td>
                       <td className="center num" style={{ verticalAlign: 'top', paddingTop: 16 }}>
-                        {qtyShippedDisplay.toLocaleString('en-US', { maximumFractionDigits: 3 })} {unitDisplay}
+                        {qtyShippedDisplay.toLocaleString('id-ID', { maximumFractionDigits: 3 })} {unitDisplay}
                       </td>
                       <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -423,7 +800,7 @@ export default function ReceiveGoodsPage() {
                         </div>
                       </td>
                       <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
-                        {isDiscrepancy ? (
+                        {qtys[item.id] !== undefined && Number(qtys[item.id]) * conversionRatio !== Number(item.qty_shipped) ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 220 }}>
                             <Select
                               value={discCategories[item.id] || ''}
@@ -431,12 +808,11 @@ export default function ReceiveGoodsPage() {
                               options={[
                                 { value: 'Barang Kurang / Hilang', label: 'Barang Kurang / Hilang' },
                                 { value: 'Barang Rusak / Cacat', label: 'Barang Rusak / Cacat' },
-                                { value: 'Lainnya', label: 'Lainnya' }
+                                { value: 'Lainnya', label: 'Lainnya' },
                               ]}
                               placeholder="Pilih alasan..."
                               inputStyle={{ height: 32, padding: '6px 10px', fontSize: 13 }}
                             />
-
                             {discCategories[item.id] === 'Lainnya' && (
                               <Input
                                 value={discNotes[item.id] || ''}
@@ -459,7 +835,202 @@ export default function ReceiveGoodsPage() {
               </tbody>
             </Table>
           </div>
+        </div>
+      </Modal>
 
+      {/* Modal 2: Penerimaan / Detail Mutasi Antar Outlet */}
+      <Modal
+        isOpen={!!transferModal}
+        onClose={() => setTransferModal(null)}
+        title={transferModal?.status === 'COMPLETED' ? `Detail Penerimaan Mutasi - ${transferModal?.transfer_number}` : `Terima Mutasi Outlet - ${transferModal?.transfer_number}`}
+        maxWidth={900}
+        closeOnOutsideClick={false}
+      >
+        <div className="modal-body" style={{ padding: '16px 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {transferModal?.status !== 'COMPLETED' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => transferFileInputRef.current?.click()}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    <Upload size={14} style={{ marginRight: 6 }} />
+                    {proofImage || previewUrl ? 'Ubah Foto' : 'Unggah Foto'}
+                  </Button>
+                )}
+                {transferModal?.status !== 'COMPLETED' && (
+                  <input
+                    type="file"
+                    ref={transferFileInputRef}
+                    style={{ display: 'none' }}
+                    accept="image/*"
+                    capture="environment"
+                    onChange={e => handlePhotoChange(e.target.files?.[0])}
+                  />
+                )}
+                {previewUrl && (
+                  <img
+                    src={previewUrl}
+                    alt="Bukti Mutasi"
+                    onClick={() => setViewingPhoto(true)}
+                    style={{ height: 40, width: 40, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                  />
+                )}
+                {transferModal?.status === 'COMPLETED' && previewUrl && (
+                  <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Bukti Penerimaan</span>
+                )}
+              </div>
+
+              {transferModal?.status !== 'COMPLETED' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={handleTransferFillAll}
+                    disabled={processing}
+                    style={{ whiteSpace: 'nowrap', border: '1px solid var(--border)' }}
+                  >
+                    Terima Semua Sesuai Mutasi
+                  </Button>
+                  <Button
+                    variant="primary"
+                    type="button"
+                    onClick={handleCompleteTransferReceipt}
+                    disabled={processing}
+                  >
+                    {processing ? 'Menyelesaikan...' : 'Diterima'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 24, overflowX: 'auto' }}>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Data Barang</th>
+                  <th className="center">Jml Dikirim</th>
+                  <th>Jml Diterima</th>
+                  <th>Selisih</th>
+                  <th className="center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transferItemsList.map(item => {
+                  const isCompleted = transferModal?.status === 'COMPLETED';
+                  const requestedQty = Number(item.requested_qty);
+                  const receivedQty = Number(item.received_qty);
+
+                  if (isCompleted) {
+                    const hasDiscrepancy = receivedQty < requestedQty;
+                    return (
+                      <tr key={item.id}>
+                        <td className="font-bold">{item.item_name}</td>
+                        <td className="center num">
+                          {requestedQty.toLocaleString('id-ID', { maximumFractionDigits: 3 })} {item.unit}
+                        </td>
+                        <td className="center num font-bold" style={{ color: hasDiscrepancy ? 'var(--danger)' : 'inherit' }}>
+                          {receivedQty.toLocaleString('id-ID', { maximumFractionDigits: 3 })} {item.unit}
+                        </td>
+                        <td>
+                          {item.discrepancy_reason ? (
+                            <div style={{ fontSize: 12, color: 'var(--danger)', lineHeight: 1.3 }}>{item.discrepancy_reason}</div>
+                          ) : (
+                            <span className="muted" style={{ fontSize: 12 }}>-</span>
+                          )}
+                        </td>
+                        <td className="center">
+                          <Badge variant={hasDiscrepancy ? 'amber' : 'green'}>
+                            {hasDiscrepancy ? 'Ada Selisih' : 'Diterima'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  const inputQty = transferQtys[item.id] !== undefined ? transferQtys[item.id] : '';
+                  const isDiscrepancy = inputQty !== '' && Number(inputQty) !== requestedQty;
+                  const isMatching = inputQty !== '' && Number(inputQty) === requestedQty;
+
+                  return (
+                    <tr key={item.id}>
+                      <td style={{ verticalAlign: 'top', paddingTop: 16 }}>
+                        <div className="font-bold">{item.item_name}</div>
+                      </td>
+                      <td className="center num" style={{ verticalAlign: 'top', paddingTop: 16 }}>
+                        {requestedQty.toLocaleString('id-ID', { maximumFractionDigits: 3 })} {item.unit}
+                      </td>
+                      <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Input
+                            type="number"
+                            step="any"
+                            min={0}
+                            placeholder="Jml"
+                            value={inputQty}
+                            onChange={e => setTransferQtys({
+                              ...transferQtys,
+                              [item.id]: e.target.value === '' ? '' : Number(e.target.value),
+                            })}
+                            style={{ width: 100, fontSize: 13, padding: '6px 10px' }}
+                          />
+                          <span style={{ fontSize: 13 }}>{item.unit}</span>
+                        </div>
+                      </td>
+                      <td style={{ verticalAlign: 'top', paddingTop: 12, paddingBottom: 16 }}>
+                        {isDiscrepancy ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 220 }}>
+                            <Select
+                              value={transferDiscCategories[item.id] || ''}
+                              onChange={val => setTransferDiscCategories({
+                                ...transferDiscCategories,
+                                [item.id]: String(val),
+                              })}
+                              options={[
+                                { value: 'Barang Kurang / Hilang', label: 'Barang Kurang / Hilang' },
+                                { value: 'Barang Rusak / Cacat', label: 'Barang Rusak / Cacat' },
+                                { value: 'Lainnya', label: 'Lainnya' },
+                              ]}
+                              placeholder="Pilih alasan..."
+                              inputStyle={{ height: 32, padding: '6px 10px', fontSize: 13 }}
+                            />
+                            {transferDiscCategories[item.id] === 'Lainnya' && (
+                              <Input
+                                value={transferDiscNotes[item.id] || ''}
+                                onChange={e => setTransferDiscNotes({
+                                  ...transferDiscNotes,
+                                  [item.id]: e.target.value,
+                                })}
+                                placeholder="Ketik detail alasan..."
+                                style={{ fontSize: 12, padding: '6px 10px', width: '100%', height: 32 }}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12, marginTop: 4, display: 'inline-block' }}>-</span>
+                        )}
+                      </td>
+                      <td className="center" style={{ verticalAlign: 'top', paddingTop: 16 }}>
+                        {inputQty === '' ? (
+                          <Badge variant="gray">Belum Diterima</Badge>
+                        ) : isDiscrepancy ? (
+                          <Badge variant="amber">Ada Selisih</Badge>
+                        ) : isMatching ? (
+                          <Badge variant="green">Diterima</Badge>
+                        ) : (
+                          <Badge variant="gray">Sesuai</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
         </div>
       </Modal>
 
@@ -467,21 +1038,34 @@ export default function ReceiveGoodsPage() {
       {viewingPhoto && previewUrl && (
         <div
           style={{
-            position: 'fixed', inset: 0, zIndex: 99999,
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
             background: 'rgba(0,0,0,0.92)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
           <button
             onClick={() => setViewingPhoto(false)}
             style={{
-              position: 'absolute', top: 20, left: 20,
-              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
-              color: '#fff', cursor: 'pointer', padding: '8px 16px',
-              fontSize: 14, display: 'flex', alignItems: 'center', gap: 8,
+              position: 'absolute',
+              top: 20,
+              left: 20,
+              background: 'rgba(255,255,255,0.15)',
+              border: 'none',
+              borderRadius: 8,
+              color: '#fff',
+              cursor: 'pointer',
+              padding: '8px 16px',
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
             Kembali
           </button>
           <img
@@ -496,7 +1080,7 @@ export default function ReceiveGoodsPage() {
         isOpen={toast.isOpen}
         message={toast.message}
         type={toast.type}
-        onClose={() => setToast({ ...toast, isOpen: false })}
+        onClose={hideToast}
       />
     </section>
   );

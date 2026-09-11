@@ -740,6 +740,7 @@ button {
   cursor: pointer;
   text-decoration: none;
   justify-content: center;
+  white-space: nowrap;
 }
 
 .btn svg {

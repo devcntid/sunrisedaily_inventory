@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getLocalPurchases, createLocalPurchase } from '@/lib/queries/local-purchases';
 import { getSession } from '@/lib/auth';
-import { put } from '@vercel/blob';
+import { uploadFile } from '@/lib/upload';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +45,10 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File;
     if (!file) return NextResponse.json({ success: false, message: 'Receipt file required' }, { status: 400 });
 
-    // Upload to Vercel Blob
-    const blob = await put(`receipts/${Date.now()}-${file.name}`, file, {
-      access: 'public',
-    });
+    // Upload receipt file
+    const receiptUrl = await uploadFile(file, 'receipts');
 
-    const purchaseId = await createLocalPurchase(outletId, purchase_date, blob.url, total_amount, items);
+    const purchaseId = await createLocalPurchase(outletId, purchase_date, receiptUrl, total_amount, items);
 
     return NextResponse.json({ success: true, purchaseId });
   } catch (err: unknown) {

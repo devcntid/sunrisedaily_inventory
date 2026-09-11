@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { uploadFile } from '@/lib/upload';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 
@@ -19,10 +19,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Ukuran foto terlalu besar. Maksimal 5 MB.' }, { status: 400 });
     }
 
-    // Append timestamp to ensure uniqueness and use addRandomSuffix
-    const uniqueFilename = `proofs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const blob = await put(uniqueFilename, file, { access: 'public', addRandomSuffix: true });
-    return NextResponse.json({ success: true, url: blob.url });
+    const url = await uploadFile(file, 'proofs');
+    return NextResponse.json({ success: true, url });
   } catch (error: unknown) {
     console.error('Upload Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';

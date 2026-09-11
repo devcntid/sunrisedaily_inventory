@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDeliveryNoteByCode, processPublicReceive } from '@/lib/queries/delivery-notes';
 import { isBarcodeScanRequired } from '@/lib/queries/settings';
-import { put } from '@vercel/blob';
+import { uploadFile } from '@/lib/upload';
 
 // GET: Fetch delivery note info (public, no auth)
 export async function GET(req: NextRequest) {
@@ -71,15 +71,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: `Surat Jalan ini tidak bisa diterima karena statusnya "${dn.status}". Hanya Surat Jalan berstatus DIKIRIM yang bisa dikonfirmasi.` }, { status: 400 });
     }
 
-    // Upload main DO photo to Vercel Blob
+    // Upload main DO photo
     let proofUrl: string | undefined = undefined;
     if (photo) {
-      const safeName = photo.name.replace(/[^a-zA-Z0-9.]/g, '') || 'photo.jpg';
-      const blob = await put(`proofs/${Date.now()}-${safeName}`, photo, {
-        access: 'public',
-        contentType: photo.type || 'image/jpeg',
-      });
-      proofUrl = blob.url;
+      proofUrl = await uploadFile(photo, 'proofs');
     }
 
     // Upload issue photos
@@ -87,12 +82,7 @@ export async function POST(req: NextRequest) {
       if (items[i].has_issue) {
         const issuePhoto = formData.get(`issue_photo_${i}`) as File | null;
         if (issuePhoto) {
-          const issueSafeName = issuePhoto.name.replace(/[^a-zA-Z0-9.]/g, '') || 'issue.jpg';
-          const issueBlob = await put(`issues/${Date.now()}-${issueSafeName}`, issuePhoto, {
-            access: 'public',
-            contentType: issuePhoto.type || 'image/jpeg',
-          });
-          items[i].issue_photo_url = issueBlob.url;
+          items[i].issue_photo_url = await uploadFile(issuePhoto, 'issues');
         }
       }
     }

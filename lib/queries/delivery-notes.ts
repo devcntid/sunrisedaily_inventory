@@ -1,15 +1,25 @@
 import { query, withTransaction } from '@/lib/db';
 import { checkAndCreateAlert, checkAndCreateAlertBulk } from './alerts';
+import { ensureTransferIssuesTable } from './outlet-transfers';
 
 export async function getPendingDeliveryNoteIssuesCount(since?: string | null): Promise<number> {
-  let sql = `SELECT count(*)::int AS cnt FROM delivery_note_issues WHERE status = 'PENDING'`;
-  const params: any[] = [];
+  await ensureTransferIssuesTable();
+  let sql1 = `SELECT count(*)::int AS cnt FROM delivery_note_issues WHERE status = 'PENDING'`;
+  let sql2 = `SELECT count(*)::int AS cnt FROM outlet_transfer_issues WHERE status = 'PENDING'`;
+  const params1: any[] = [];
+  const params2: any[] = [];
   if (since) {
-    sql += ` AND created_at > $1`;
-    params.push(new Date(Number(since)).toISOString());
+    const isoDate = new Date(Number(since)).toISOString();
+    sql1 += ` AND created_at > $1`;
+    params1.push(isoDate);
+    sql2 += ` AND reported_at > $1`;
+    params2.push(isoDate);
   }
-  const res = await query(sql, params);
-  return res.rows[0]?.cnt ?? 0;
+  const [res1, res2] = await Promise.all([
+    query(sql1, params1),
+    query(sql2, params2).catch(() => ({ rows: [{ cnt: 0 }] })),
+  ]);
+  return (Number(res1.rows[0]?.cnt) || 0) + (Number(res2.rows[0]?.cnt) || 0);
 }
 
 export interface DeliveryNote {
@@ -908,35 +918,126 @@ export async function bulkRecordScan(data: {
 }
 
 export async function getDeliveryNoteIssues(status?: string) {
-  let q = `
-    SELECT i.*, 
-          dni.delivery_note_id, dni.qty_shipped, dni.qty_received,
-          dn.delivery_note_number, dn.proof_image_url AS dn_proof_url, o.name AS outlet_name,
-          it.name AS item_name, it.purchase_unit, it.conversion_ratio, it.smallest_unit
+  await ensureTransferIssuesTable();
+
+  let qDn = `
+    SELECT 
+      i.id,
+      i.delivery_note_item_id,
+      i.qty_issue,
+      i.reason,
+      i.photo_url,
+      i.status,
+      i.reported_at,
+      i.resolved_at,
+      i.resolved_by,
+      i.resolution_notes,
+      dni.delivery_note_id, 
+      dni.qty_shipped, 
+      dni.qty_received,
+      dn.delivery_note_number, 
+      dn.proof_image_url AS dn_proof_url, 
+      o.name AS outlet_name,
+      it.name AS item_name, 
+      it.purchase_unit, 
+      it.conversion_ratio, 
+      it.smallest_unit,
+      'DELIVERY_NOTE' AS source_type,
+      NULL::text AS from_outlet_name,
+      NULL::bigint AS transfer_id
     FROM delivery_note_issues i
     JOIN delivery_note_items dni ON i.delivery_note_item_id = dni.id
     JOIN delivery_notes dn ON dni.delivery_note_id = dn.id
     JOIN outlets o ON dn.outlet_id = o.id
     JOIN items it ON dni.item_id = it.id
   `;
+
+  let qTransfer = `
+    SELECT 
+      oti.id,
+      oti.transfer_item_id AS delivery_note_item_id,
+      oti.qty_issue,
+      oti.reason,
+      oti.photo_url,
+      oti.status,
+      oti.reported_at,
+      oti.resolved_at,
+      oti.resolved_by,
+      oti.resolution_notes,
+      NULL::bigint AS delivery_note_id,
+      ti.requested_qty AS qty_shipped,
+      ti.received_qty AS qty_received,
+      ot.transfer_number AS delivery_note_number,
+      NULL::text AS dn_proof_url,
+      to_o.name AS outlet_name,
+      it.name AS item_name,
+      it.purchase_unit,
+      it.conversion_ratio,
+      it.smallest_unit,
+      'OUTLET_TRANSFER' AS source_type,
+      from_o.name AS from_outlet_name,
+      ot.id AS transfer_id
+    FROM outlet_transfer_issues oti
+    JOIN outlet_transfer_items ti ON oti.transfer_item_id = ti.id
+    JOIN outlet_transfers ot ON oti.transfer_id = ot.id
+    JOIN outlets to_o ON ot.to_outlet_id = to_o.id
+    LEFT JOIN outlets from_o ON ot.from_outlet_id = from_o.id
+    JOIN items it ON ti.item_id = it.id
+  `;
+
+  let fullQuery = `
+    SELECT * FROM (
+      ${qDn}
+      UNION ALL
+      ${qTransfer}
+    ) combined_issues
+  `;
+
   const params: unknown[] = [];
   if (status) {
     if (status === 'RESOLVED') {
-      q += ` WHERE i.status != 'PENDING'`;
+      fullQuery += ` WHERE status != 'PENDING'`;
     } else {
-      q += ` WHERE i.status = $1`;
+      fullQuery += ` WHERE status = $1`;
       params.push(status);
     }
   }
-  q += ` ORDER BY i.reported_at DESC`;
+  fullQuery += ` ORDER BY reported_at DESC`;
 
-  const res = await query(q, params);
+  const res = await query(fullQuery, params);
   return res.rows;
 }
 
-export async function resolveDeliveryNoteIssue(issueId: number, action: 'REPLACE' | 'WRITE_OFF', resolvedBy: number, notes: string) {
+export async function resolveDeliveryNoteIssue(
+  issueId: number,
+  action: 'REPLACE' | 'WRITE_OFF',
+  resolvedBy: number,
+  notes: string,
+  sourceType?: 'DELIVERY_NOTE' | 'OUTLET_TRANSFER'
+) {
+  await ensureTransferIssuesTable();
   return withTransaction(async (client) => {
-    // Get the issue
+    // If explicitly marked as OUTLET_TRANSFER or checking transfer issues first
+    if (sourceType === 'OUTLET_TRANSFER') {
+      const otiRes = await client.query(
+        `SELECT * FROM outlet_transfer_issues WHERE id = $1 FOR UPDATE`,
+        [issueId]
+      );
+      const oti = otiRes.rows[0];
+      if (!oti) throw new Error('Tiket masalah mutasi tidak ditemukan');
+      if (oti.status !== 'PENDING') throw new Error('Tiket masalah sudah diselesaikan sebelumnya');
+
+      const newStatus = action === 'REPLACE' ? 'APPROVED_REPLACE' : 'APPROVED_WRITE_OFF';
+      await client.query(
+        `UPDATE outlet_transfer_issues 
+         SET status = $1, resolved_at = NOW(), resolved_by = $2, resolution_notes = $3
+         WHERE id = $4`,
+        [newStatus, resolvedBy, notes, issueId]
+      );
+      return { success: true };
+    }
+
+    // Default: Check delivery_note_issues first
     const issueRes = await client.query(
       `SELECT i.*, dni.item_id, dni.delivery_note_id, dn.outlet_id, dn.order_id 
        FROM delivery_note_issues i
@@ -946,7 +1047,27 @@ export async function resolveDeliveryNoteIssue(issueId: number, action: 'REPLACE
       [issueId]
     );
     const issue = issueRes.rows[0];
-    if (!issue) throw new Error('Issue not found');
+    if (!issue) {
+      // Fallback to check outlet_transfer_issues if not found in delivery_note_issues
+      const otiRes = await client.query(
+        `SELECT * FROM outlet_transfer_issues WHERE id = $1 FOR UPDATE`,
+        [issueId]
+      );
+      const oti = otiRes.rows[0];
+      if (oti) {
+        if (oti.status !== 'PENDING') throw new Error('Tiket masalah sudah diselesaikan sebelumnya');
+        const newStatus = action === 'REPLACE' ? 'APPROVED_REPLACE' : 'APPROVED_WRITE_OFF';
+        await client.query(
+          `UPDATE outlet_transfer_issues 
+           SET status = $1, resolved_at = NOW(), resolved_by = $2, resolution_notes = $3
+           WHERE id = $4`,
+          [newStatus, resolvedBy, notes, issueId]
+        );
+        return { success: true };
+      }
+      throw new Error('Tiket masalah tidak ditemukan');
+    }
+
     if (issue.status !== 'PENDING') throw new Error('Issue is already resolved');
 
     const newStatus = action === 'REPLACE' ? 'APPROVED_REPLACE' : 'APPROVED_WRITE_OFF';
@@ -982,6 +1103,7 @@ export async function resolveDeliveryNoteIssue(issueId: number, action: 'REPLACE
           [realItemId, -qtyToWriteOff, newBalance, issueId]
         );
       }
+      return { success: true };
     } else if (action === 'REPLACE') {
       // Create a new DO Draft for the replacement.
       // We need to create a new DO linked to the same order.

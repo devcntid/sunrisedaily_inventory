@@ -51,6 +51,7 @@ DROP TABLE IF EXISTS "public"."delivery_note_items" CASCADE;
 DROP TABLE IF EXISTS "public"."moka_oauth_states" CASCADE;
 DROP TABLE IF EXISTS "public"."goods_receipts" CASCADE;
 DROP TABLE IF EXISTS "public"."purchase_order_items" CASCADE;
+DROP TABLE IF EXISTS "public"."outlet_transfer_issues" CASCADE;
 DROP TABLE IF EXISTS "public"."outlet_transfer_items" CASCADE;
 DROP TABLE IF EXISTS "public"."outlet_transfers" CASCADE;
 DROP TABLE IF EXISTS "public"."inventory_batches" CASCADE;
@@ -94,6 +95,7 @@ CREATE SEQUENCE IF NOT EXISTS delivery_note_items_id_seq;
 CREATE SEQUENCE IF NOT EXISTS goods_receipts_id_seq;
 CREATE SEQUENCE IF NOT EXISTS purchase_order_items_id_seq;
 CREATE SEQUENCE IF NOT EXISTS outlet_transfers_id_seq;
+CREATE SEQUENCE IF NOT EXISTS outlet_transfer_issues_id_seq;
 CREATE SEQUENCE IF NOT EXISTS outlet_transfer_items_id_seq;
 CREATE SEQUENCE IF NOT EXISTS inventory_batches_id_seq;
 
@@ -451,6 +453,8 @@ CREATE TABLE "public"."order_items" (
     "qty_approved" numeric(10,2),
     "approved_smallest_qty" numeric(10,2),
     "center_notes" text,
+    "requested_unit" varchar(50),
+    "requested_conversion_ratio" numeric(15,6),
     PRIMARY KEY ("id")
 );
 
@@ -1186,7 +1190,7 @@ CREATE TABLE "public"."outlet_transfers" (
 
     "id" int8 NOT NULL DEFAULT nextval('outlet_transfers_id_seq'::regclass),
     "transfer_number" varchar(50) NOT NULL,
-    "from_outlet_id" int8 NOT NULL,
+    "from_outlet_id" int8,
     "to_outlet_id" int8 NOT NULL,
     "requested_by" int8,
     "approved_by" int8,
@@ -1197,6 +1201,7 @@ CREATE TABLE "public"."outlet_transfers" (
     "created_at" timestamptz NOT NULL DEFAULT now(),
     "approved_at" timestamptz,
     "received_at" timestamptz,
+    "proof_image_url" varchar(1024),
     PRIMARY KEY ("id")
 );
 
@@ -1228,6 +1233,31 @@ CREATE TABLE "public"."outlet_transfer_items" (
 -- Indices
 CREATE INDEX idx_outlet_transfer_items_transfer ON public.outlet_transfer_items USING btree (transfer_id);
 CREATE INDEX idx_outlet_transfer_items_item ON public.outlet_transfer_items USING btree (item_id);
+
+-- Table Definition
+CREATE TABLE "public"."outlet_transfer_issues" (
+
+    "id" int8 NOT NULL DEFAULT nextval('outlet_transfer_issues_id_seq'::regclass),
+    "transfer_id" int8 NOT NULL,
+    "transfer_item_id" int8 NOT NULL,
+    "qty_issue" numeric(12,2) NOT NULL,
+    "reason" varchar(255) NOT NULL,
+    "photo_url" varchar(1024),
+    "status" varchar(20) NOT NULL DEFAULT 'PENDING'::character varying,
+    "reported_at" timestamptz NOT NULL DEFAULT now(),
+    "resolved_at" timestamptz,
+    "resolved_by" int8,
+    "resolution_notes" varchar(1024),
+    PRIMARY KEY ("id")
+);
+
+-- Column Comments
+COMMENT ON COLUMN "public"."outlet_transfer_issues"."status" IS 'Valid values: PENDING, RESOLVED, REJECTED';
+
+-- Indices
+CREATE INDEX idx_outlet_transfer_issues_transfer ON public.outlet_transfer_issues USING btree (transfer_id);
+CREATE INDEX idx_outlet_transfer_issues_status ON public.outlet_transfer_issues USING btree (status);
+
 
 
 -- Table Definition
@@ -1338,3 +1368,7 @@ ALTER TABLE "public"."outlet_transfer_items" ADD CONSTRAINT "outlet_transfer_ite
 
 ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE CASCADE;
 ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_goods_receipt_id_fkey" FOREIGN KEY ("goods_receipt_id") REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL;
+
+ALTER TABLE "public"."outlet_transfer_issues" ADD CONSTRAINT "outlet_transfer_issues_transfer_id_fkey" FOREIGN KEY ("transfer_id") REFERENCES "public"."outlet_transfers"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."outlet_transfer_issues" ADD CONSTRAINT "outlet_transfer_issues_transfer_item_id_fkey" FOREIGN KEY ("transfer_item_id") REFERENCES "public"."outlet_transfer_items"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."outlet_transfer_issues" ADD CONSTRAINT "outlet_transfer_issues_resolved_by_fkey" FOREIGN KEY ("resolved_by") REFERENCES "public"."users"("id") ON DELETE SET NULL;

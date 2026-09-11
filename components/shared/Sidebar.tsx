@@ -106,6 +106,8 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
   const [liveRequestCount, setLiveRequestCount] = useState(0);
   const [liveReturnsCount, setLiveReturnsCount] = useState(0);
   const [liveLocalPurchaseCount, setLiveLocalPurchaseCount] = useState(0);
+  const [liveTransferCount, setLiveTransferCount] = useState(0);
+  const [liveReceiveCount, setLiveReceiveCount] = useState(0);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const menu = role === 'ADMIN_PUSAT' ? CENTRAL_MENU : OUTLET_MENU;
@@ -131,25 +133,15 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
   }
 
   useEffect(() => {
-    if (pathname === '/returns' && role === 'ADMIN_PUSAT') {
-      setLiveReturnsCount(0);
-    }
-    if (pathname === '/outlet-purchases' && role === 'ADMIN_PUSAT') {
-      setLiveLocalPurchaseCount(0);
-    }
-    if (pathname === '/outlet/receive-goods' && role === 'ADMIN_OUTLET') {
-      localStorage.setItem('lastSeenReceiveGoods', Date.now().toString());
-      setLiveRequestCount(0);
-    }
-  }, [pathname, role]);
-
-  useEffect(() => {
     const fetchBadges = async () => {
       try {
         if (role === 'ADMIN_PUSAT') {
-          const [alertsRes, reqRes] = await Promise.all([
+          const [alertsRes, reqRes, transferRes, returnsRes, lpRes] = await Promise.all([
             fetch('/api/alerts/count', { cache: 'no-store' }),
-            fetch('/api/orders/pending-count', { cache: 'no-store' })
+            fetch('/api/orders/pending-count', { cache: 'no-store' }),
+            fetch('/api/outlet-transfers/pending-count', { cache: 'no-store' }),
+            fetch('/api/returns/pending-count', { cache: 'no-store' }),
+            fetch('/api/outlets/local-purchases/unread', { cache: 'no-store' })
           ]);
           if (alertsRes.ok) {
             const data = await alertsRes.json();
@@ -159,16 +151,26 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
             const data = await reqRes.json();
             setLiveRequestCount(data.count ?? 0);
           }
+          if (transferRes.ok) {
+            const data = await transferRes.json();
+            setLiveTransferCount(data.count ?? 0);
+          }
+          if (returnsRes.ok) {
+            const data = await returnsRes.json();
+            setLiveReturnsCount(data.count ?? 0);
+          }
+          if (lpRes.ok) {
+            const data = await lpRes.json();
+            setLiveLocalPurchaseCount(data.count ?? 0);
+          }
         } else if (role === 'ADMIN_OUTLET') {
-          const lastSeenReceiveGoods = localStorage.getItem('lastSeenReceiveGoods') || '';
-          const receiveUrl = lastSeenReceiveGoods ? `/api/delivery-notes/shipped-count?since=${lastSeenReceiveGoods}` : '/api/delivery-notes/shipped-count';
-          const [reqRes, alertsRes] = await Promise.all([
-            fetch(receiveUrl, { cache: 'no-store' }),
+          const [receiveRes, alertsRes] = await Promise.all([
+            fetch('/api/delivery-notes/shipped-count', { cache: 'no-store' }),
             fetch('/api/outlet/alerts/count', { cache: 'no-store' })
           ]);
-          if (reqRes.ok) {
-            const data = await reqRes.json();
-            setLiveRequestCount(data.count ?? 0);
+          if (receiveRes.ok) {
+            const data = await receiveRes.json();
+            setLiveReceiveCount(data.count ?? 0);
           }
           if (alertsRes.ok) {
             const data = await alertsRes.json();
@@ -181,7 +183,7 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
     };
 
     fetchBadges();
-    const interval = setInterval(fetchBadges, 30000);
+    const interval = setInterval(fetchBadges, 8000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') fetchBadges();
@@ -194,49 +196,14 @@ export default function Sidebar({ role, alertCount = 0 }: SidebarProps) {
     };
   }, [role]);
 
-  // Polling khusus returns badge setiap 10 detik (real-time)
-  useEffect(() => {
-    if (role !== 'ADMIN_PUSAT') return;
-
-    const fetchFastBadges = async () => {
-      try {
-        const promises = [];
-        if (pathname !== '/returns') promises.push(fetch('/api/returns/pending-count', { cache: 'no-store' }));
-        else promises.push(Promise.resolve(null));
-        
-        if (pathname !== '/outlet-purchases') promises.push(fetch('/api/outlets/local-purchases/unread', { cache: 'no-store' }));
-        else promises.push(Promise.resolve(null));
-
-        const [returnsRes, lpRes] = await Promise.all(promises);
-
-        if (returnsRes && returnsRes.ok) {
-          const data = await returnsRes.json();
-          setLiveReturnsCount(data.count ?? 0);
-        }
-        if (lpRes && lpRes.ok) {
-          const data = await lpRes.json();
-          setLiveLocalPurchaseCount(data.count ?? 0);
-        }
-      } catch { /* abaikan */ }
-    };
-
-    const interval = setInterval(fetchFastBadges, 10000);
-    fetchFastBadges();
-    return () => clearInterval(interval);
-  }, [role, pathname]);
-
-  const getEffectiveBadge = (href: string, actualCount: number) => {
-    if (pathname === href || pathname.startsWith(href + '/')) return 0;
-    return actualCount;
-  };
-
   const menuWithBadge = menu.map(item => {
-    if (item.href === '/alerts' && role === 'ADMIN_PUSAT') return { ...item, badge: getEffectiveBadge(item.href, liveAlertCount) };
-    if (item.href === '/requests' && role === 'ADMIN_PUSAT') return { ...item, badge: getEffectiveBadge(item.href, liveRequestCount) };
-    if (item.href === '/returns' && role === 'ADMIN_PUSAT') return { ...item, badge: getEffectiveBadge(item.href, liveReturnsCount) };
-    if (item.href === '/outlet-purchases' && role === 'ADMIN_PUSAT') return { ...item, badge: getEffectiveBadge(item.href, liveLocalPurchaseCount) };
-    if (item.href === '/outlet/inventory/stock' && role === 'ADMIN_OUTLET') return { ...item, badge: getEffectiveBadge(item.href, liveAlertCount) };
-    if (item.href === '/outlet/receive-goods' && role === 'ADMIN_OUTLET') return { ...item, badge: getEffectiveBadge(item.href, liveRequestCount) };
+    if (item.href === '/alerts' && role === 'ADMIN_PUSAT') return { ...item, badge: liveAlertCount };
+    if (item.href === '/requests' && role === 'ADMIN_PUSAT') return { ...item, badge: liveRequestCount };
+    if (item.href === '/outlet-transfers' && role === 'ADMIN_PUSAT') return { ...item, badge: liveTransferCount };
+    if (item.href === '/returns' && role === 'ADMIN_PUSAT') return { ...item, badge: liveReturnsCount };
+    if (item.href === '/outlet-purchases' && role === 'ADMIN_PUSAT') return { ...item, badge: liveLocalPurchaseCount };
+    if (item.href === '/outlet/inventory/stock' && role === 'ADMIN_OUTLET') return { ...item, badge: liveAlertCount };
+    if (item.href === '/outlet/receive-goods' && role === 'ADMIN_OUTLET') return { ...item, badge: liveReceiveCount };
     return item;
   });
 

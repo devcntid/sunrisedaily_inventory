@@ -10,12 +10,18 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { action, notes } = await req.json();
+    const { action, notes, source_type } = await req.json();
     if (action !== 'REPLACE' && action !== 'WRITE_OFF') {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    const result = await resolveDeliveryNoteIssue(Number(params.id), action, user.userId, notes || '');
+    const result = await resolveDeliveryNoteIssue(
+      Number(params.id),
+      action,
+      user.userId,
+      notes || '',
+      source_type
+    );
     
     return NextResponse.json({ success: true, new_dn_id: result?.new_dn_id });
   } catch (error: unknown) {

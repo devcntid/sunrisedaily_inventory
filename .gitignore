@@ -55,3 +55,4 @@ db/seeds/*_from_dump.sql
 *.pem
 .turbo/
 /require/*
+public/uploads/

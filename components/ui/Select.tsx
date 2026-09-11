@@ -141,6 +141,21 @@ export function Select({ value, onChange, options, style, className = '', placeh
                 placeholder={creatable ? "Cari atau ketik baru..." : "Ketik untuk mencari..."} 
                 value={searchTerm} 
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const firstClickable = filteredOptions.find(o => !o.isGroup && !o.disabled);
+                    if (firstClickable) {
+                      setIsOpen(false);
+                      setSearchTerm('');
+                      requestAnimationFrame(() => {
+                        setTimeout(() => {
+                          onChange(firstClickable.value);
+                        }, 0);
+                      });
+                    }
+                  }
+                }}
                 style={{ width: '100%', border: 'none', outline: 'none', fontSize: 13, background: 'transparent' }}
               />
             </div>
