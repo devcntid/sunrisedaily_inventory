@@ -27,6 +27,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
   // Form State
   const [form, setForm] = useState({
     name: '',
+    variant: '',
     venue_id: '',
     yield_amount: '1',
     yield_unit: 'pcs',
@@ -58,24 +59,35 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
   };
 
   const selectSuggestion = (s: string) => {
-    setForm(f => ({ ...f, name: s }));
+    let base = s;
+    let v = '';
+    if (s.includes(' - ')) {
+      const parts = s.split(' - ');
+      base = parts[0].trim();
+      v = parts.slice(1).join(' - ').trim();
+    }
+    setForm(f => ({ ...f, name: base, variant: v }));
     setShowMenuSuggestions(false);
   };
 
   const loadMasterData = async () => {
-    const [venueRes, ingRes] = await Promise.all([
-      fetch('/api/hpp?limit=1000'), // Returns venues and menus
-      fetch('/api/hpp/ingredients?limit=1000') // Fetch all ingredients for dropdown
-    ]);
-    const venueData = await venueRes.json();
-    const ingData = await ingRes.json();
-    setVenues(venueData.venues ?? []);
-    setCategories(venueData.categories ?? []);
-    setAvailableIngredients(ingData.data ?? []);
+    try {
+      const [venueRes, ingRes] = await Promise.all([
+        fetch('/api/hpp?limit=1000'), // Returns venues and menus
+        fetch('/api/hpp/ingredients?limit=1000') // Fetch all ingredients for dropdown
+      ]);
+      const venueData = await venueRes.json();
+      const ingData = await ingRes.json();
+      setVenues(venueData.venues ?? []);
+      setCategories(venueData.categories ?? []);
+      setAvailableIngredients(ingData.data ?? []);
 
-    if (venueData.data) {
-      const uniqueMenus = Array.from(new Set(venueData.data.map((m: any) => m.display_name || m.name)));
-      setAvailableMenus(uniqueMenus as string[]);
+      if (venueData.data) {
+        const uniqueMenus = Array.from(new Set(venueData.data.map((m: any) => m.name || m.display_name)));
+        setAvailableMenus(uniqueMenus as string[]);
+      }
+    } catch (err) {
+      console.error('Error loading master data:', err);
     }
   };
 
@@ -85,8 +97,18 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
       if (!res.ok) throw new Error('Recipe not found');
       const data = await res.json();
 
+      let baseName = data.recipe.menu_base_name || data.recipe.name || '';
+      let variant = data.recipe.menu_variant || '';
+
+      if (!variant && baseName.includes(' - ')) {
+        const parts = baseName.split(' - ');
+        baseName = parts[0].trim();
+        variant = parts.slice(1).join(' - ').trim();
+      }
+
       setForm({
-        name: data.recipe.name,
+        name: baseName,
+        variant: variant,
         venue_id: data.recipe.is_all_venues ? 'ALL' : String(data.recipe.venue_id),
         yield_amount: String(data.recipe.yield),
         yield_unit: data.recipe.yield_unit || '',
@@ -117,8 +139,8 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
         loadRecipe();
       } else {
         // If it's a new recipe, check if menu_id is provided to auto-fill
-        const params = new URLSearchParams(window.location.search);
-        const menuIdQuery = params.get('menu_id');
+        const urlParams = new URLSearchParams(window.location.search);
+        const menuIdQuery = urlParams.get('menu_id');
         if (menuIdQuery) {
           fetch(`/api/hpp/menus/${menuIdQuery}`)
             .then(r => r.ok ? r.json() : null)
@@ -126,7 +148,8 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
               if (data && data.menu) {
                 setForm(f => ({
                   ...f,
-                  name: data.menu.display_name || data.menu.name,
+                  name: data.menu.name || data.menu.display_name || '',
+                  variant: data.menu.variant || '',
                   category_id: data.menu.category_id ? String(data.menu.category_id) : '',
                   sale_price: data.menu.sale_price ? String(Math.round(Number(data.menu.sale_price))) : '0',
                 }));
@@ -159,26 +182,21 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
     setIngredients(ingredients.filter(ing => ing.id !== id));
   };
 
-  const handleIngredientChange = (id: string, field: string, value: string) => {
-    setIngredients(prev => prev.map(ing => {
+  const handleIngredientChange = (id: string, field: string, value: any) => {
+    setIngredients(ingredients.map(ing => {
       if (ing.id !== id) return ing;
-
       const updated = { ...ing, [field]: value };
-
-      if (field === 'ingredient_name') {
-        const selected = availableIngredients.find(a => a.name === value);
-        if (selected) {
-          updated.ingredient_id = String(selected.id);
-          updated.unit = selected.default_unit || '';
-          updated.cost_per_unit = Number(selected.standard_cost_per_unit) || 0;
-        } else {
-          updated.ingredient_id = '';
+      
+      if (field === 'ingredient_id') {
+        const found = availableIngredients.find(ai => String(ai.id) === String(value));
+        if (found) {
+          updated.ingredient_name = found.name;
+          updated.cost_per_unit = found.standard_cost_per_unit;
+          updated.unit = found.default_unit || '';
         }
       }
 
-      // Recalculate extension
       updated.extension = Number(updated.quantity) * Number(updated.cost_per_unit);
-
       return updated;
     }));
   };
@@ -215,11 +233,20 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
 
     setSaving(true);
 
+    const baseName = form.name.trim();
+    const variant = form.variant.trim();
+    const displayName = variant ? `${baseName} - ${variant}` : baseName;
+
     const payload = {
       ...form,
+      name: baseName,
+      base_name: baseName,
+      variant: variant || null,
+      display_name: displayName,
       venue_id: form.venue_id === 'ALL' ? 'ALL' : Number(form.venue_id),
       category_id: form.category_id ? Number(form.category_id) : undefined,
       yield_amount: Number(form.yield_amount),
+      yield_unit: form.yield_unit,
       x_factor_pct: Number(form.x_factor_pct) / 100,
       sale_price: Number(form.sale_price) || 0,
       ingredients: ingredients.map(ing => ({
@@ -278,7 +305,16 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
           </div>
           <div className="card-body" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ position: 'relative' }}>
-              <Input label="Nama Produk / Menu" required placeholder="misal. Americano - Hot Medium" autoComplete="off" value={form.name} onChange={handleMenuNameChange} onFocus={handleMenuNameChange} onBlur={() => setTimeout(() => setShowMenuSuggestions(false), 200)} />
+              <Input
+                label="Nama Produk / Menu"
+                required
+                placeholder="misal. Americano"
+                autoComplete="off"
+                value={form.name}
+                onChange={handleMenuNameChange}
+                onFocus={handleMenuNameChange}
+                onBlur={() => setTimeout(() => setShowMenuSuggestions(false), 200)}
+              />
               {showMenuSuggestions && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 4, zIndex: 10, maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginTop: 2 }}>
                   {menuSuggestions.map((s, idx) => (
@@ -289,6 +325,13 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
                 </div>
               )}
             </div>
+
+            <Input
+              label="Variasi / Ukuran"
+              placeholder="misal. Hot Medium / Small / Large"
+              value={form.variant}
+              onChange={e => setForm(f => ({ ...f, variant: e.target.value }))}
+            />
 
             <div className="form-group" style={{ marginBottom: undefined }}>
               <label className="form-label req">Kategori</label>
