@@ -317,9 +317,9 @@ export async function updateItem(id: number, data: Partial<{
     if (data.brands !== undefined && updatedItem) {
       // Dapatkan semua brand yang sudah ada
       const existingBrandsRes = await client.query(`SELECT id FROM items WHERE parent_id = $1`, [id]);
-      const existingBrandIds = existingBrandsRes.rows.map(r => r.id);
+      const existingBrandIds = existingBrandsRes.rows.map(r => Number(r.id));
       
-      const incomingBrandIds = data.brands.map(b => b.id ? Number(b.id) : null).filter(Boolean) as number[];
+      const incomingBrandIds = data.brands.map(b => b.id ? Number(b.id) : null).filter((bid): bid is number => bid !== null && !isNaN(bid) && bid > 0);
       
       // Hapus brand yang tidak ada di payload (dihapus dari form)
       for (const existingId of existingBrandIds) {
@@ -344,25 +344,59 @@ export async function updateItem(id: number, data: Partial<{
 
       if (data.brands.length > 0) {
         for (const brand of data.brands) {
-          if (brand.id) {
+          const brandId = brand.id ? Number(brand.id) : null;
+          const brandRatio = Number(brand.conversion_ratio) || 1;
+          const brandPrice = Number(brand.purchase_price) || 0;
+          const brandUnit = brand.purchase_unit || updatedItem.purchase_unit;
+          const brandActive = brand.is_active ?? true;
+
+          if (brandId && brandId > 0 && existingBrandIds.includes(brandId)) {
             await client.query(
-              `UPDATE items SET name=$1, barcode=$2, current_average_price=$3, last_purchase_price=$3, conversion_ratio=$4, purchase_unit=$5, is_active=$6, updated_at=now() WHERE id=$7`,
-              [brand.name, brand.barcode || null, brand.purchase_price, brand.conversion_ratio, brand.purchase_unit || updatedItem.purchase_unit, brand.is_active ?? true, Number(brand.id)]
+              `UPDATE items 
+               SET name = $1, 
+                   barcode = $2, 
+                   current_average_price = $3, 
+                   last_purchase_price = $3, 
+                   conversion_ratio = $4, 
+                   purchase_unit = $5, 
+                   smallest_unit = $6,
+                   is_active = $7, 
+                   updated_at = now() 
+               WHERE id = $8`,
+              [
+                brand.name, 
+                brand.barcode || null, 
+                brandPrice, 
+                brandRatio, 
+                brandUnit, 
+                updatedItem.smallest_unit,
+                brandActive, 
+                brandId
+              ]
             );
           } else {
             const newBrandRes = await client.query(
               `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global)
                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
               [
-                brand.name, updatedItem.category_id, brand.purchase_unit || updatedItem.purchase_unit, updatedItem.smallest_unit, brand.conversion_ratio,
-                updatedItem.minimum_threshold, updatedItem.target_stock, updatedItem.threshold_type, updatedItem.is_perishable,
-                brand.barcode || null, brand.purchase_price, brand.purchase_price,
+                brand.name, 
+                updatedItem.category_id, 
+                brandUnit, 
+                updatedItem.smallest_unit, 
+                brandRatio,
+                updatedItem.minimum_threshold, 
+                updatedItem.target_stock, 
+                updatedItem.threshold_type, 
+                updatedItem.is_perishable,
+                brand.barcode || null, 
+                brandPrice, 
+                brandPrice,
                 updatedItem.ingredient_id,
                 updatedItem.is_split_allowed,
                 updatedItem.min_order_qty,
                 updatedItem.order_multiple,
                 id,
-                brand.is_active ?? true,
+                brandActive,
                 updatedItem.is_global
               ]
             );

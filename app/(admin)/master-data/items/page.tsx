@@ -324,7 +324,7 @@ export default function ItemsPage() {
   function openEdit(item: Item) {
     setEditing(item);
     const hasConv = item.purchase_unit !== item.smallest_unit || Number(item.conversion_ratio) > 1;
-    const hasBrands = items.some(i => i.parent_id === item.id) || !!item.has_children;
+    const hasBrands = items.some(i => Number(i.parent_id) === Number(item.id)) || !!item.has_children;
     setForm({
       name: item.name, barcode: item.barcode || `ERC${String(item.id).padStart(6, '0')}`, category_id: String(item.category_id ?? ''),
       purchase_unit: normalizeUnit(item.purchase_unit), package_inner_size: '',
@@ -345,7 +345,7 @@ export default function ItemsPage() {
       is_global: item.is_global ?? true,
       venue_ids: (item.venue_ids || []).map((id: number | string) => Number(id)).filter((id: number) => id > 0),
     });
-    let childBrands = items.filter(i => i.parent_id === item.id).map(child => ({
+    let childBrands = items.filter(i => Number(i.parent_id) === Number(item.id)).map(child => ({
       id: String(child.id),
       name: child.name,
       barcode: child.barcode || `ERC${String(child.id).padStart(6, '0')}`,
@@ -359,7 +359,7 @@ export default function ItemsPage() {
     setBrands(childBrands);
     setForm(f => ({ ...f, has_brands: childBrands.length > 0 || !!item.has_children }));
 
-    if (item.has_children) {
+    if (item.has_children || hasBrands) {
       fetch(`/api/items?parent_id=${item.id}&active_only=false`)
         .then(res => res.json())
         .then(data => {
@@ -377,7 +377,8 @@ export default function ItemsPage() {
             })));
             setForm(f => ({ ...f, has_brands: true }));
           }
-        });
+        })
+        .catch(() => {});
     }
 
     setError('');
@@ -445,11 +446,11 @@ export default function ItemsPage() {
         order_multiple: Number(form.order_multiple || 1),
         is_global: form.is_global,
         venue_ids: form.is_global ? [] : form.venue_ids,
-        brands: brands.filter(b => b.name).map(b => {
+        brands: brands.filter(b => b.name && b.name.trim()).map(b => {
           const brandRatio = Number(b.conversion_ratio) || 1;
           return {
-            id: b.id,
-            name: b.name,
+            id: b.id ? String(b.id) : undefined,
+            name: b.name.trim(),
             barcode: b.barcode,
             purchase_unit: b.purchase_unit || form.purchase_unit,
             purchase_price: Number(b.purchase_price || 0) / brandRatio,
@@ -940,6 +941,7 @@ export default function ItemsPage() {
                     <input
                       className="input"
                       type="text"
+                      disabled={form.has_brands}
                       value={formatNumberInput(form.conversion_ratio)}
                       onChange={e => {
                         const raw = parseNumberInput(e.target.value);
