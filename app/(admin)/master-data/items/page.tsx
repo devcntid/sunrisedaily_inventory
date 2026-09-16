@@ -30,8 +30,22 @@ interface Item {
   has_children?: boolean;
   is_global?: boolean;
   venue_ids?: number[];
+  brand?: string | null;
+  spec?: string | null;
 }
-interface BrandForm { id?: string; name: string; barcode: string; purchase_unit: string; purchase_price: string; conversion_ratio: string; current_average_price?: number; last_purchase_price?: number; is_active?: boolean; }
+interface BrandForm {
+  id?: string;
+  name: string;
+  barcode: string;
+  purchase_unit: string;
+  purchase_price: string;
+  conversion_ratio: string;
+  current_average_price?: number;
+  last_purchase_price?: number;
+  is_active?: boolean;
+  brand?: string;
+  spec?: string;
+}
 interface Category { id: number; name: string; }
 interface Ingredient { id: number; name: string; unit?: string; }
 interface Venue { id: number; name: string; }
@@ -152,7 +166,32 @@ export default function ItemsPage() {
   // Modals
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
-  const [form, setForm] = useState({ name: '', barcode: '', category_id: '', purchase_unit: '', package_inner_size: '', smallest_unit: '', conversion_ratio: '1', minimum_threshold: '10', target_stock: '20', threshold_type: 'ABSOLUT', is_perishable: false, is_active: true, purchase_price: '0', has_conversion: false, ingredient_id: '', is_split_allowed: false, min_order_qty: '1', order_multiple: '1', has_brands: false, is_global: true, venue_ids: [] as number[] });
+  const [form, setForm] = useState({
+    name: '',
+    item_base_name: '',
+    brand: '',
+    spec: '',
+    barcode: '',
+    category_id: '',
+    purchase_unit: '',
+    package_inner_size: '',
+    smallest_unit: '',
+    conversion_ratio: '1',
+    minimum_threshold: '10',
+    target_stock: '20',
+    threshold_type: 'ABSOLUT',
+    is_perishable: false,
+    is_active: true,
+    purchase_price: '0',
+    has_conversion: false,
+    ingredient_id: '',
+    is_split_allowed: false,
+    min_order_qty: '1',
+    order_multiple: '1',
+    has_brands: false,
+    is_global: true,
+    venue_ids: [] as number[]
+  });
   const [brands, setBrands] = useState<BrandForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -197,8 +236,48 @@ export default function ItemsPage() {
   // Bulk Edit
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ is_global: true, venue_ids: [] as number[] });
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkForm, setBulkForm] = useState({ is_global: true, venue_ids: [] as number[] });
+
+  function toggleSelectItem(id: number) {
+    setSelectedItems(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  }
+
+  function toggleSelectAll() {
+    if (selectedItems.length === filteredItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(filteredItems.map(i => i.id));
+    }
+  }
+
+  async function handleBulkSave() {
+    if (selectedItems.length === 0) return;
+    setBulkSaving(true);
+    try {
+      const res = await fetch('/api/items/bulk-venue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_ids: selectedItems,
+          is_global: bulkForm.is_global,
+          venue_ids: bulkForm.is_global ? [] : bulkForm.venue_ids
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Gagal update venue');
+      }
+      setToastInfo({ show: true, msg: 'Venue berhasil diperbarui untuk barang terpilih', type: 'success' });
+      setShowBulkModal(false);
+      setSelectedItems([]);
+      fetchItems();
+    } catch (err: any) {
+      setToastInfo({ show: true, msg: err.message || 'Gagal menghubungi server', type: 'error' });
+    } finally {
+      setBulkSaving(false);
+    }
+  }
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -285,12 +364,13 @@ export default function ItemsPage() {
     }
   };
 
-  // Auto-fill and lock Reporting Unit when has_brands is true
+  // Auto-detect unit pairing
   useEffect(() => {
-    if (form.has_brands && form.smallest_unit) {
+    if (!form.smallest_unit) return;
+
+    if (!form.has_brands) {
       let autoPurchaseUnit = '';
       let autoConversionRatio = '1';
-
       if (form.smallest_unit.toLowerCase() === 'ml') {
         autoPurchaseUnit = 'Liter';
         autoConversionRatio = '1000';
@@ -298,11 +378,29 @@ export default function ItemsPage() {
         autoPurchaseUnit = 'Kg';
         autoConversionRatio = '1000';
       } else {
-        autoPurchaseUnit = form.smallest_unit; // Pcs -> Pcs, dll
+        autoPurchaseUnit = form.smallest_unit;
         autoConversionRatio = '1';
       }
-
-      // Update form state if it's different to prevent infinite loops
+      if (form.purchase_unit !== autoPurchaseUnit || form.conversion_ratio !== autoConversionRatio) {
+        setForm(f => ({
+          ...f,
+          purchase_unit: autoPurchaseUnit,
+          conversion_ratio: autoConversionRatio
+        }));
+      }
+    } else {
+      let autoPurchaseUnit = '';
+      let autoConversionRatio = '1';
+      if (form.smallest_unit.toLowerCase() === 'ml') {
+        autoPurchaseUnit = 'Liter';
+        autoConversionRatio = '1000';
+      } else if (form.smallest_unit.toLowerCase() === 'gr') {
+        autoPurchaseUnit = 'Kg';
+        autoConversionRatio = '1000';
+      } else {
+        autoPurchaseUnit = form.smallest_unit;
+        autoConversionRatio = '1';
+      }
       if (form.purchase_unit !== autoPurchaseUnit || form.conversion_ratio !== autoConversionRatio) {
         setForm(f => ({
           ...f,
@@ -315,7 +413,32 @@ export default function ItemsPage() {
 
   function openAdd() {
     setEditing(null);
-    setForm({ name: '', barcode: '', category_id: '', purchase_unit: '', package_inner_size: '', smallest_unit: '', conversion_ratio: '1', minimum_threshold: '10', target_stock: '20', threshold_type: 'ABSOLUT', is_perishable: false, is_active: true, purchase_price: '0', has_conversion: false, ingredient_id: '', is_split_allowed: false, min_order_qty: '1', order_multiple: '1', has_brands: false, is_global: true, venue_ids: [] });
+    setForm({
+      name: '',
+      item_base_name: '',
+      brand: '',
+      spec: '',
+      barcode: '',
+      category_id: '',
+      purchase_unit: '',
+      package_inner_size: '',
+      smallest_unit: '',
+      conversion_ratio: '1',
+      minimum_threshold: '10',
+      target_stock: '20',
+      threshold_type: 'ABSOLUT',
+      is_perishable: false,
+      is_active: true,
+      purchase_price: '0',
+      has_conversion: false,
+      ingredient_id: '',
+      is_split_allowed: false,
+      min_order_qty: '1',
+      order_multiple: '1',
+      has_brands: false,
+      is_global: true,
+      venue_ids: []
+    });
     setBrands([]);
     setError('');
     setShowModal(true);
@@ -325,16 +448,29 @@ export default function ItemsPage() {
     setEditing(item);
     const hasConv = item.purchase_unit !== item.smallest_unit || Number(item.conversion_ratio) > 1;
     const hasBrands = items.some(i => Number(i.parent_id) === Number(item.id)) || !!item.has_children;
+    let baseName = item.name;
+    if (item.brand) {
+      baseName = baseName.replace(new RegExp(`\\b${item.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+    }
+    if (item.spec) {
+      baseName = baseName.replace(new RegExp(`\\b${item.spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+    }
     setForm({
-      name: item.name, barcode: item.barcode || `ERC${String(item.id).padStart(6, '0')}`, category_id: String(item.category_id ?? ''),
-      purchase_unit: normalizeUnit(item.purchase_unit), package_inner_size: '',
-      smallest_unit: normalizeUnit(item.smallest_unit), conversion_ratio: String(Number(item.conversion_ratio)),
-      // Untuk barang dengan brand: threshold disimpan langsung dalam satuan terkecil (ml), tidak perlu dibagi
-      // Untuk barang tanpa brand: threshold di-display dalam satuan beli (purchase_unit)
+      name: item.name,
+      item_base_name: (item.brand || item.spec) ? (baseName || item.name) : item.name,
+      brand: item.brand || '',
+      spec: item.spec || '',
+      barcode: item.barcode || `ERC${String(item.id).padStart(6, '0')}`,
+      category_id: String(item.category_id ?? ''),
+      purchase_unit: normalizeUnit(item.purchase_unit),
+      package_inner_size: '',
+      smallest_unit: normalizeUnit(item.smallest_unit),
+      conversion_ratio: String(Number(item.conversion_ratio)),
       minimum_threshold: String(hasBrands ? Number(item.minimum_threshold) : Number(item.minimum_threshold) / (hasConv ? Number(item.conversion_ratio || 1) : 1)),
       target_stock: String(Number(item.target_stock ?? 0) / (hasConv ? Number(item.conversion_ratio || 1) : 1)),
       threshold_type: item.threshold_type,
-      is_perishable: item.is_perishable, is_active: item.is_active,
+      is_perishable: item.is_perishable,
+      is_active: item.is_active,
       purchase_price: String(Math.round(Number(item.current_average_price ?? 0) * Number(item.conversion_ratio || 1))),
       has_conversion: hasConv,
       ingredient_id: item.ingredient_id ? String(item.ingredient_id) : '',
@@ -348,6 +484,8 @@ export default function ItemsPage() {
     let childBrands = items.filter(i => Number(i.parent_id) === Number(item.id)).map(child => ({
       id: String(child.id),
       name: child.name,
+      brand: child.brand || '',
+      spec: child.spec || item.spec || '',
       barcode: child.barcode || `ERC${String(child.id).padStart(6, '0')}`,
       purchase_unit: child.purchase_unit || '',
       purchase_price: String(Math.round(Number(child.current_average_price ?? 0) * Number(child.conversion_ratio || 1))),
@@ -367,6 +505,8 @@ export default function ItemsPage() {
             setBrands(data.data.map((child: any) => ({
               id: String(child.id),
               name: child.name,
+              brand: child.brand || '',
+              spec: child.spec || item.spec || '',
               barcode: child.barcode || `ERC${String(child.id).padStart(6, '0')}`,
               purchase_unit: child.purchase_unit || '',
               purchase_price: String(Math.round(Number(child.current_average_price ?? 0) * Number(child.conversion_ratio || 1))),
@@ -385,20 +525,6 @@ export default function ItemsPage() {
     setShowModal(true);
   }
 
-  // Generate SKU Function
-  function autoGenerateSKU(itemName: string, parentName: string, index: number) {
-    if (!itemName && !parentName) return '';
-    const sourceName = (itemName || parentName).trim().toUpperCase();
-    if (sourceName.length === 0) return '';
-    const firstLetter = sourceName.charAt(0);
-    const lastLetter = sourceName.charAt(sourceName.length - 1);
-
-    // Find max ID logically (we'll just use a randomish/timestamp if we don't know the exact next DB id)
-    // A better approach for UI preview is random or just index based
-    const suffix = (1000 + items.length + index + 1).toString();
-    return `${firstLetter}${lastLetter}-${suffix}`;
-  }
-
   async function handleSave() {
     if (!form.name || !form.category_id || (!form.has_brands && !form.purchase_unit) || !form.smallest_unit) {
       setToastInfo({ show: true, msg: form.has_brands ? 'Nama, kategori, dan satuan terkecil wajib diisi' : 'Nama, kategori, satuan beli, dan satuan terkecil wajib diisi', type: 'error' });
@@ -408,19 +534,16 @@ export default function ItemsPage() {
     try {
       const url = editing ? `/api/items/${editing.id}` : '/api/items';
       const method = editing ? 'PATCH' : 'POST';
-      const { package_inner_size, has_conversion, purchase_price, ...cleanForm } = form;
+      const { package_inner_size, has_conversion, purchase_price, item_base_name, ...cleanForm } = form;
 
       const finalRatio = Number(form.conversion_ratio) || 1;
       const finalSmallestUnit = form.smallest_unit;
       const finalAvgPrice = form.has_brands ? 0 : (Number(purchase_price) / finalRatio);
       const finalPurchaseUnit = form.purchase_unit;
 
-      // Untuk barang dengan brand: user input langsung dalam satuan terkecil (ml), tidak perlu dikalikan
-      // Untuk barang tanpa brand: kalikan input (dalam purchase_unit) dengan conversion_ratio
       const minThresholdSmall = form.has_brands ? Number(form.minimum_threshold) : Number(form.minimum_threshold) * finalRatio;
-      const targetStockSmall = 0; // Target Stok dihapus dari UI
+      const targetStockSmall = 0;
 
-      // Validasi: cegah numeric overflow di kolom DB (kolom NUMERIC di PostgreSQL maks ~99 juta)
       const MAX_SAFE_VALUE = 99_999_999;
       if (minThresholdSmall > MAX_SAFE_VALUE) {
         setToastInfo({
@@ -433,6 +556,9 @@ export default function ItemsPage() {
 
       const payload = {
         ...cleanForm,
+        name: form.name.trim(),
+        brand: form.brand ? form.brand.trim() : null,
+        spec: form.spec ? form.spec.trim() : null,
         category_id: Number(form.category_id),
         purchase_unit: finalPurchaseUnit,
         smallest_unit: finalSmallestUnit,
@@ -455,7 +581,9 @@ export default function ItemsPage() {
             purchase_unit: b.purchase_unit || form.purchase_unit,
             purchase_price: Number(b.purchase_price || 0) / brandRatio,
             conversion_ratio: brandRatio,
-            is_active: b.is_active ?? true
+            is_active: b.is_active ?? true,
+            brand: b.brand ? b.brand.trim() : undefined,
+            spec: b.spec ? b.spec.trim() : (form.spec ? form.spec.trim() : undefined)
           };
         })
       };
@@ -493,31 +621,6 @@ export default function ItemsPage() {
       setIsDeleting(false);
       setConfirmDelete(null);
       fetchItems();
-    }
-  }
-
-  async function handleBulkSave() {
-    setBulkSaving(true);
-    try {
-      const payload = {
-        item_ids: selectedItems,
-        is_global: bulkForm.is_global,
-        venue_ids: bulkForm.is_global ? [] : bulkForm.venue_ids
-      };
-      const res = await fetch('/api/items/bulk-venue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json();
-      if (!data.success) {
-        setToastInfo({ show: true, msg: data.message, type: 'error' });
-      } else {
-        setToastInfo({ show: true, msg: data.message, type: 'success' });
-        setShowBulkModal(false);
-        setSelectedItems([]);
-        fetchItems();
-      }
-    } catch (err) {
-      setToastInfo({ show: true, msg: 'Gagal menghubungi server', type: 'error' });
-    } finally {
-      setBulkSaving(false);
     }
   }
 
@@ -725,6 +828,12 @@ export default function ItemsPage() {
                                 <span style={{ fontSize: 9, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700, letterSpacing: 0.5 }}>HPP / RESEP</span>
                               )}
                             </div>
+                            {(item.brand || item.spec) && (
+                              <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+                                {item.brand && <span style={{ fontSize: 10, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Merek: {item.brand}</span>}
+                                {item.spec && <span style={{ fontSize: 10, background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Spek: {item.spec}</span>}
+                              </div>
+                            )}
                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                               {!item.is_active && <span style={{ fontSize: 10, background: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>NONAKTIF</span>}
                               {item.is_perishable && <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>CEPAT BASI</span>}
@@ -807,15 +916,24 @@ export default function ItemsPage() {
             {/* LEFT COLUMN: Main Inputs */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
+              {/* Row 1: Nama Item Pokok, Merek / Brand, Spesifikasi / Ukuran */}
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1.4, position: 'relative' }}>
                   <Input
-                    label="Nama Barang"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    label="Nama Item Pokok"
+                    required
+                    placeholder="Contoh: MSG / Beras / Susu UHT"
+                    value={form.item_base_name}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const combined = form.has_brands
+                        ? [val, form.spec].filter(Boolean).map(s => s.trim()).join(' ')
+                        : [val, form.brand, form.spec].filter(Boolean).map(s => s.trim()).join(' ');
+                      setForm(f => ({ ...f, item_base_name: val, name: combined }));
+                      setShowNameSuggestions(true);
+                    }}
                     onFocus={() => setShowNameSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
-                    placeholder="buat nama barang baru"
                   />
                   {showNameSuggestions && matchingExistingItems.length > 0 && (
                     <div style={{
@@ -850,7 +968,16 @@ export default function ItemsPage() {
                           onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            setForm(f => ({ ...f, name: item.name }));
+                            let baseName = item.name;
+                            if (item.brand) baseName = baseName.replace(new RegExp(`\\b${item.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+                            if (item.spec) baseName = baseName.replace(new RegExp(`\\b${item.spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+                            setForm(f => ({
+                              ...f,
+                              name: item.name,
+                              item_base_name: item.brand || item.spec ? (baseName || item.name) : item.name,
+                              brand: item.brand || '',
+                              spec: item.spec || ''
+                            }));
                             setShowNameSuggestions(false);
                           }}
                         >
@@ -866,7 +993,41 @@ export default function ItemsPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ flex: 0.9 }}>
+
+                {!form.has_brands && (
+                  <div style={{ flex: 1 }}>
+                    <Input
+                      label="Merek / Brand"
+                      placeholder="Contoh: Ajinomoto / Diamond"
+                      value={form.brand}
+                      onChange={e => {
+                        const val = e.target.value;
+                        const combined = [form.item_base_name, val, form.spec].filter(Boolean).map(s => s.trim()).join(' ');
+                        setForm(f => ({ ...f, brand: val, name: combined }));
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div style={{ flex: 1 }}>
+                  <Input
+                    label="Spesifikasi / Ukuran"
+                    placeholder="Contoh: 1 kg / 250 gr / 2 L"
+                    value={form.spec}
+                    onChange={e => {
+                      const val = e.target.value;
+                      const combined = form.has_brands
+                        ? [form.item_base_name, val].filter(Boolean).map(s => s.trim()).join(' ')
+                        : [form.item_base_name, form.brand, val].filter(Boolean).map(s => s.trim()).join(' ');
+                      setForm(f => ({ ...f, spec: val, name: combined }));
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: SKU, Kategori */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
                   <Input
                     label="SKU"
                     value={form.barcode || ''}
@@ -874,7 +1035,7 @@ export default function ItemsPage() {
                     placeholder="Otomatis jika dikosongkan"
                   />
                 </div>
-                <div className="form-group" style={{ flex: 1.8, marginBottom: 0 }}>
+                <div className="form-group" style={{ flex: 1.5, marginBottom: 0 }}>
                   <label className="req">Kategori</label>
                   <Select
                     value={form.category_id}
@@ -1115,7 +1276,6 @@ export default function ItemsPage() {
                           <input className="input" placeholder="Susu Diamond" value={brand.name} disabled={brand.is_active === false} onChange={e => {
                             const newBrands = [...brands];
                             newBrands[i].name = e.target.value;
-                            if (!newBrands[i].barcode) newBrands[i].barcode = autoGenerateSKU(e.target.value, form.name, i);
                             setBrands(newBrands);
                           }} style={{ fontSize: 13, padding: '8px 12px' }} />
                         </div>
