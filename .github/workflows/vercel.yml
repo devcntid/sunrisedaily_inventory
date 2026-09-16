@@ -1,0 +1,44 @@
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  force-owner-commit:
+    if: github.event.head_commit.message != 'trigger vercel build' && (github.actor == 'irvandrian2025' || github.actor == 'ravenhunt')
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.OWNER_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set git identity (owner)
+        run: |
+          git config user.name "devcntid"
+          git config user.email "dev@cnt.id"
+
+      - name: Update VERSION
+        run: |
+          date '+%Y-%m-%d %H:%M:%S' > VERSION
+
+      - name: Commit change
+        run: |
+          git add VERSION
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "trigger vercel build"
+
+      - name: Push using owner token
+        run: |
+          git push origin HEAD:main
