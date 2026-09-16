@@ -182,39 +182,68 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
     setIngredients(ingredients.filter(ing => ing.id !== id));
   };
 
+  const handleSelectIngredient = (id: string, item: any) => {
+    setIngredients(prev => prev.map(ing => {
+      if (ing.id !== id) return ing;
+      const cost = Number(item.standard_cost_per_unit || 0);
+      const qty = parseFloat(ing.quantity) || 0;
+      return {
+        ...ing,
+        ingredient_id: String(item.id),
+        ingredient_name: item.name,
+        unit: item.default_unit || '',
+        cost_per_unit: cost,
+        extension: qty * cost,
+      };
+    }));
+  };
+
   const handleIngredientChange = (id: string, field: string, value: any) => {
-    setIngredients(ingredients.map(ing => {
+    setIngredients(prev => prev.map(ing => {
       if (ing.id !== id) return ing;
       const updated = { ...ing, [field]: value };
       
-      if (field === 'ingredient_id') {
-        const found = availableIngredients.find(ai => String(ai.id) === String(value));
-        if (found) {
-          updated.ingredient_name = found.name;
-          updated.cost_per_unit = found.standard_cost_per_unit;
-          updated.unit = found.default_unit || '';
+      if (field === 'quantity') {
+        const qty = parseFloat(value) || 0;
+        updated.extension = qty * Number(updated.cost_per_unit || 0);
+      } else if (field === 'ingredient_name') {
+        if (!value.trim()) {
+          updated.ingredient_id = '';
+          updated.unit = '';
+          updated.cost_per_unit = 0;
+          updated.extension = 0;
+        } else {
+          const exact = availableIngredients.find(ai => ai.name.toLowerCase() === value.trim().toLowerCase());
+          if (exact) {
+            updated.ingredient_id = String(exact.id);
+            updated.unit = exact.default_unit || '';
+            updated.cost_per_unit = Number(exact.standard_cost_per_unit || 0);
+            updated.extension = (parseFloat(updated.quantity) || 0) * updated.cost_per_unit;
+          }
         }
       }
 
-      updated.extension = Number(updated.quantity) * Number(updated.cost_per_unit);
       return updated;
     }));
   };
 
   const handleSyncHPP = () => {
     setIngredients(prev => prev.map(ing => {
-      const active = availableIngredients.find(a => String(a.id) === ing.ingredient_id);
+      const active = availableIngredients.find(a => String(a.id) === String(ing.ingredient_id));
       if (active) {
         const newCost = Number(active.standard_cost_per_unit) || 0;
+        const newUnit = active.default_unit || ing.unit;
+        const qty = parseFloat(ing.quantity) || 0;
         return {
           ...ing,
+          unit: newUnit,
           cost_per_unit: newCost,
-          extension: Number(ing.quantity) * newCost
+          extension: qty * newCost
         };
       }
       return ing;
     }));
-    setToastInfo({ show: true, msg: 'Harga HPP berhasil disinkronkan dengan Master Data terbaru.', type: 'success' });
+    setToastInfo({ show: true, msg: 'Harga HPP & Satuan berhasil disinkronkan dengan Master Data terbaru.', type: 'success' });
   };
 
   const handleSave = async () => {
@@ -462,7 +491,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
                                   onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
-                                    handleIngredientChange(ing.id, 'ingredient_name', a.name);
+                                    handleSelectIngredient(ing.id, a);
                                     setActiveDropdown(null);
                                   }}
                                 >
@@ -477,13 +506,60 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
                         )}
                       </td>
                       <td style={{ padding: '8px 8px' }}>
-                        <input className="input" type="number" min="0" step="0.1" style={{ width: '100%', height: 36, fontSize: 13, padding: '6px 8px' }} value={ing.quantity} onChange={e => handleIngredientChange(ing.id, 'quantity', e.target.value)} />
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="0"
+                          style={{ width: '100%', height: 36, fontSize: 13, padding: '6px 8px' }}
+                          value={ing.quantity}
+                          onChange={e => handleIngredientChange(ing.id, 'quantity', e.target.value)}
+                        />
                       </td>
                       <td style={{ padding: '8px 8px' }}>
-                        <input className="input" type="text" style={{ width: '100%', height: 36, fontSize: 13, padding: '6px 8px' }} value={ing.unit} onChange={e => handleIngredientChange(ing.id, 'unit', e.target.value)} />
+                        <input
+                          className="input"
+                          type="text"
+                          readOnly
+                          disabled
+                          placeholder="Satuan"
+                          value={ing.unit || '-'}
+                          style={{
+                            width: '100%',
+                            height: 36,
+                            fontSize: 13,
+                            padding: '6px 8px',
+                            background: '#f8fafc',
+                            color: '#475569',
+                            cursor: 'not-allowed',
+                            textAlign: 'center',
+                            border: '1px solid #e2e8f0',
+                            fontWeight: 500
+                          }}
+                          title="Satuan mengikuti Master Bahan Baku"
+                        />
                       </td>
                       <td className="right" style={{ padding: '8px 8px' }}>
-                        <input className="input right" type="number" min="0" step="1" style={{ width: '100%', height: 36, fontSize: 13, padding: '6px 8px' }} value={ing.cost_per_unit} onChange={e => handleIngredientChange(ing.id, 'cost_per_unit', e.target.value)} />
+                        <input
+                          className="input right"
+                          type="text"
+                          readOnly
+                          disabled
+                          value={ing.cost_per_unit ? `Rp ${Math.round(Number(ing.cost_per_unit)).toLocaleString('id-ID')}` : 'Rp 0'}
+                          style={{
+                            width: '100%',
+                            height: 36,
+                            fontSize: 13,
+                            padding: '6px 8px',
+                            background: '#f8fafc',
+                            color: '#475569',
+                            cursor: 'not-allowed',
+                            border: '1px solid #e2e8f0',
+                            fontWeight: 500
+                          }}
+                          title="Harga per satuan mengikuti Master Bahan Baku"
+                        />
                       </td>
                       <td className="right" style={{ fontWeight: 600, fontSize: 13, padding: '8px 14px', color: '#1e293b' }}>
                         Rp {Math.round(ing.extension).toLocaleString('id-ID')}
