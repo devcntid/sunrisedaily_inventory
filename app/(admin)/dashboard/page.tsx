@@ -30,7 +30,12 @@ function fmt(n: number) {
 }
 
 function fmtCurrency(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(n));
 }
 
 function fmtDate(d: string) {
@@ -106,7 +111,13 @@ export default async function DashboardPage({
             </div>
             <div className="kpi-card">
               <div className="kpi-label">Nilai Inventaris</div>
-              <div className="kpi-value" style={{ fontSize: '20px' }}>{fmtCurrency(stats.stockValue).replace(',00', '')}</div>
+              <div
+                className="kpi-value"
+                style={{ fontSize: '18px', letterSpacing: '-0.3px' }}
+                title={fmtCurrency(stats.stockValue)}
+              >
+                {fmtCurrency(stats.stockValue)}
+              </div>
               <div className="kpi-note">estimasi aset pusat</div>
             </div>
             <Link href="/alerts" style={{ textDecoration: 'none' }} className={`kpi-card ${stats.unresolvedAlerts > 0 ? 'alert' : ''}`}>
