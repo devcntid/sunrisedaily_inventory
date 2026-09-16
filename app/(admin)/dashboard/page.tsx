@@ -113,7 +113,7 @@ export default async function DashboardPage({
               <div className="kpi-label">Nilai Inventaris</div>
               <div
                 className="kpi-value"
-                style={{ fontSize: '18px', letterSpacing: '-0.3px' }}
+                style={{ fontSize: '17px', letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}
                 title={fmtCurrency(stats.stockValue)}
               >
                 {fmtCurrency(stats.stockValue)}
