@@ -4,6 +4,8 @@ import { PURCHASE_UNITS, SMALLEST_UNITS, normalizeUnit } from '@/lib/constants/u
 export interface ValidatedItemRow {
   item_id?: number | null;
   name: string;
+  brand?: string | null;
+  spec?: string | null;
   category_id: number;
   category_name: string;
   purchase_unit: string;
@@ -23,6 +25,8 @@ export async function getTemplateItems() {
     SELECT
       i.id AS item_id,
       i.name AS nama_barang,
+      i.brand AS merk,
+      i.spec AS spec,
       c.name AS kategori,
       i.purchase_unit AS satuan_beli,
       i.smallest_unit AS satuan_terkecil,
@@ -280,6 +284,8 @@ export async function buildItemPreviewRows(rawData: Record<string, unknown>[]): 
       item_id,
       action,
       name,
+      brand: merk || null,
+      spec: spec || null,
       category_id: category?.id ?? 0,
       category_name: categoryName,
       purchase_unit: purchase_unit || purchaseRaw,
@@ -329,8 +335,10 @@ export async function upsertItems(rows: ValidatedItemRow[]) {
              barcode = COALESCE(NULLIF($10, ''), barcode),
              is_active = $11,
              is_perishable = $12,
+             brand = COALESCE($13, brand),
+             spec = COALESCE($14, spec),
              updated_at = now()
-           WHERE id = $13 AND parent_id IS NULL`,
+           WHERE id = $15 AND parent_id IS NULL`,
           [
             row.name,
             row.category_id,
@@ -344,6 +352,8 @@ export async function upsertItems(rows: ValidatedItemRow[]) {
             row.barcode,
             is_active,
             row.is_perishable,
+            row.brand || null,
+            row.spec || null,
             row.item_id,
           ]
         );
@@ -352,8 +362,9 @@ export async function upsertItems(rows: ValidatedItemRow[]) {
           `INSERT INTO items (
              name, category_id, purchase_unit, smallest_unit, conversion_ratio,
              minimum_threshold, target_stock, threshold_type, is_perishable,
-             barcode, current_average_price, last_purchase_price, is_active, is_global
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,true)
+             barcode, current_average_price, last_purchase_price, is_active, is_global,
+             brand, spec
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$12,true,$13,$14)
            RETURNING id, barcode`,
           [
             row.name,
@@ -368,6 +379,8 @@ export async function upsertItems(rows: ValidatedItemRow[]) {
             row.barcode,
             row.current_average_price,
             is_active,
+            row.brand || null,
+            row.spec || null,
           ]
         );
 

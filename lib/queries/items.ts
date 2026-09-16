@@ -33,6 +33,8 @@ export interface Item {
   has_children?: boolean;
   is_global?: boolean;
   venue_ids?: number[];
+  brand?: string | null;
+  spec?: string | null;
 }
 
 export async function getItems(opts?: { categoryId?: string; search?: string; activeOnly?: boolean; parentOnly?: boolean; venueId?: number; parentId?: number }) {
@@ -123,11 +125,13 @@ export async function createItem(data: {
   is_global?: boolean;
   venue_ids?: number[];
   expired_date?: string | null;
+  brand?: string | null;
+  spec?: string | null;
 }) {
   return withTransaction(async (client) => {
     const result = await client.query<Item>(
-      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global, expired_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global, expired_date, brand, spec)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING *`,
       [
         data.name, data.category_id, data.purchase_unit, data.smallest_unit, data.conversion_ratio,
@@ -139,7 +143,9 @@ export async function createItem(data: {
         data.order_multiple ?? 1,
         data.parent_id ?? null,
         data.is_global ?? true,
-        data.expired_date || null
+        data.expired_date || null,
+        data.brand || null,
+        data.spec || null
       ]
     );
     const item = result.rows[0];
@@ -155,13 +161,13 @@ export async function createItem(data: {
 
 export async function createItemWithBrands(
   parentData: Parameters<typeof createItem>[0],
-  brands: Array<{ name: string; barcode: string; purchase_price: number; conversion_ratio: number; purchase_unit?: string; is_active?: boolean }>
+  brands: Array<{ name: string; barcode: string; purchase_price: number; conversion_ratio: number; purchase_unit?: string; is_active?: boolean; brand?: string; spec?: string }>
 ) {
   return withTransaction(async (client) => {
     // 1. Create Parent
     const parentRes = await client.query(
-      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULL,$17) RETURNING id`,
+      `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_global, brand, spec)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NULL,$17,$18,$19) RETURNING id`,
       [
         parentData.name, parentData.category_id, parentData.purchase_unit, parentData.smallest_unit, parentData.conversion_ratio,
         parentData.minimum_threshold, parentData.target_stock ?? 0, parentData.threshold_type, parentData.is_perishable,
@@ -170,7 +176,9 @@ export async function createItemWithBrands(
         parentData.is_split_allowed ?? false,
         parentData.min_order_qty ?? 1,
         parentData.order_multiple ?? 1,
-        parentData.is_global ?? true
+        parentData.is_global ?? true,
+        parentData.brand || null,
+        parentData.spec || null
       ]
     );
     const parentId = parentRes.rows[0].id;
@@ -184,8 +192,8 @@ export async function createItemWithBrands(
     // 2. Create Brands
     for (const brand of brands) {
       const brandRes = await client.query(
-        `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+        `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global, brand, spec)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
         [
           brand.name, parentData.category_id, brand.purchase_unit || parentData.purchase_unit, parentData.smallest_unit, brand.conversion_ratio,
           parentData.minimum_threshold, parentData.target_stock ?? 0, parentData.threshold_type, parentData.is_perishable,
@@ -196,7 +204,9 @@ export async function createItemWithBrands(
           parentData.order_multiple ?? 1,
           parentId,
           brand.is_active ?? true,
-          parentData.is_global ?? true
+          parentData.is_global ?? true,
+          brand.brand || null,
+          brand.spec || parentData.spec || null
         ]
       );
       const childId = brandRes.rows[0].id;
@@ -229,6 +239,8 @@ export async function updateItem(id: number, data: Partial<{
   min_order_qty: number;
   order_multiple: number;
   is_global: boolean;
+  brand?: string | null;
+  spec?: string | null;
   venue_ids?: number[];
   brands?: Array<{
     id?: string;
@@ -238,6 +250,8 @@ export async function updateItem(id: number, data: Partial<{
     conversion_ratio: number;
     purchase_unit?: string;
     is_active?: boolean;
+    brand?: string;
+    spec?: string;
   }>;
 }>) {
   const ALLOWED_COLUMNS = [
@@ -245,7 +259,8 @@ export async function updateItem(id: number, data: Partial<{
     'minimum_threshold', 'target_stock', 'threshold_type', 'is_perishable',
     'is_active', 'barcode', 'current_average_price', 'last_purchase_price',
     'ingredient_id', 'is_split_allowed', 'min_order_qty', 'order_multiple',
-    'package_unit', 'package_qty', 'package_inner_size', 'is_global'
+    'package_unit', 'package_qty', 'package_inner_size', 'is_global',
+    'brand', 'spec'
   ];
   const fields = Object.keys(data).filter(key => ALLOWED_COLUMNS.includes(key) && (data as Record<string, unknown>)[key] !== undefined);
   const sets = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
@@ -350,6 +365,9 @@ export async function updateItem(id: number, data: Partial<{
           const brandUnit = brand.purchase_unit || updatedItem.purchase_unit;
           const brandActive = brand.is_active ?? true;
 
+          const brandName = brand.brand ? brand.brand.trim() : null;
+          const brandSpec = brand.spec ? brand.spec.trim() : (updatedItem.spec ? updatedItem.spec.trim() : null);
+
           if (brandId && brandId > 0 && existingBrandIds.includes(brandId)) {
             await client.query(
               `UPDATE items 
@@ -360,9 +378,11 @@ export async function updateItem(id: number, data: Partial<{
                    conversion_ratio = $4, 
                    purchase_unit = $5, 
                    smallest_unit = $6,
-                   is_active = $7, 
+                   is_active = $7,
+                   brand = COALESCE($8, brand),
+                   spec = COALESCE($9, spec),
                    updated_at = now() 
-               WHERE id = $8`,
+               WHERE id = $10`,
               [
                 brand.name, 
                 brand.barcode || null, 
@@ -370,14 +390,16 @@ export async function updateItem(id: number, data: Partial<{
                 brandRatio, 
                 brandUnit, 
                 updatedItem.smallest_unit,
-                brandActive, 
+                brandActive,
+                brandName,
+                brandSpec,
                 brandId
               ]
             );
           } else {
             const newBrandRes = await client.query(
-              `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+              `INSERT INTO items (name, category_id, purchase_unit, smallest_unit, conversion_ratio, minimum_threshold, target_stock, threshold_type, is_perishable, barcode, current_average_price, last_purchase_price, ingredient_id, is_split_allowed, min_order_qty, order_multiple, parent_id, is_active, is_global, brand, spec)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
               [
                 brand.name, 
                 updatedItem.category_id, 
@@ -397,7 +419,9 @@ export async function updateItem(id: number, data: Partial<{
                 updatedItem.order_multiple,
                 id,
                 brandActive,
-                updatedItem.is_global
+                updatedItem.is_global,
+                brandName,
+                brandSpec
               ]
             );
             const childId = newBrandRes.rows[0].id;
