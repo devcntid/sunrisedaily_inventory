@@ -51,6 +51,7 @@ DROP TABLE IF EXISTS "public"."delivery_note_items" CASCADE;
 DROP TABLE IF EXISTS "public"."moka_oauth_states" CASCADE;
 DROP TABLE IF EXISTS "public"."goods_receipts" CASCADE;
 DROP TABLE IF EXISTS "public"."purchase_order_items" CASCADE;
+DROP TABLE IF EXISTS "public"."inventory_batches" CASCADE;
 
 -- Sequence and defined type
 CREATE SEQUENCE IF NOT EXISTS items_id_seq;
@@ -90,6 +91,7 @@ CREATE SEQUENCE IF NOT EXISTS delivery_note_issues_id_seq;
 CREATE SEQUENCE IF NOT EXISTS delivery_note_items_id_seq;
 CREATE SEQUENCE IF NOT EXISTS goods_receipts_id_seq;
 CREATE SEQUENCE IF NOT EXISTS purchase_order_items_id_seq;
+CREATE SEQUENCE IF NOT EXISTS inventory_batches_id_seq;
 
 -- Table Definition
 CREATE TABLE "public"."items" (
@@ -118,6 +120,8 @@ CREATE TABLE "public"."items" (
     "package_inner_size" varchar,
     "parent_id" int8,
     "is_global" bool DEFAULT true,
+    "brand" varchar(100),
+    "spec" varchar(100),
     PRIMARY KEY ("id")
 );
 
@@ -1252,10 +1256,11 @@ ALTER TABLE "public"."goods_receipts" ADD CONSTRAINT "goods_receipts_received_by
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_purchase_order_id_fkey" FOREIGN KEY ("purchase_order_id") REFERENCES "public"."purchase_orders"("id") ON DELETE CASCADE;
 ALTER TABLE "public"."purchase_order_items" ADD CONSTRAINT "purchase_order_items_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE RESTRICT;
 
-CREATE TABLE IF NOT EXISTS "public"."inventory_batches" (
+-- Table Definition
+CREATE TABLE "public"."inventory_batches" (
     "id" int8 NOT NULL DEFAULT nextval('inventory_batches_id_seq'::regclass),
-    "item_id" int8 NOT NULL REFERENCES "public"."items"("id") ON DELETE CASCADE,
-    "goods_receipt_id" int8 REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL,
+    "item_id" int8 NOT NULL,
+    "goods_receipt_id" int8,
     "batch_number" varchar(100),
     "expired_date" date NOT NULL,
     "qty_received" numeric(12,2) NOT NULL,
@@ -1263,3 +1268,8 @@ CREATE TABLE IF NOT EXISTS "public"."inventory_batches" (
     "created_at" timestamptz DEFAULT now(),
     PRIMARY KEY ("id")
 );
+
+ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_item_id_fkey" FOREIGN KEY ("item_id") REFERENCES "public"."items"("id") ON DELETE CASCADE;
+ALTER TABLE "public"."inventory_batches" ADD CONSTRAINT "inventory_batches_goods_receipt_id_fkey" FOREIGN KEY ("goods_receipt_id") REFERENCES "public"."goods_receipts"("id") ON DELETE SET NULL;
+CREATE INDEX idx_inventory_batches_item_id ON public.inventory_batches USING btree (item_id);
+CREATE INDEX idx_inventory_batches_expired_date ON public.inventory_batches USING btree (expired_date);
