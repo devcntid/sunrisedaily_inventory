@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Table } from '@/components/ui/Table';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -79,7 +80,8 @@ function MenusTab({ categories }: { categories: Category[] }) {
   const [data, setData] = useState<MenuRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [catId, setCatId] = useState('');
   const [marginFlag, setMarginFlag] = useState('');
   const [page, setPage] = useState(1);
@@ -159,14 +161,14 @@ function MenusTab({ categories }: { categories: Category[] }) {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch.trim()) url += `&search=${encodeURIComponent(debouncedSearch.trim())}`;
     if (catId) url += `&category_id=${catId}`;
     if (marginFlag) url += `&margin_flag=${marginFlag}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, catId, marginFlag, page, limit]);
+  }, [debouncedSearch, catId, marginFlag, page, limit]);
 
   const openDetail = async (menuId: number) => {
     try {
@@ -215,8 +217,8 @@ function MenusTab({ categories }: { categories: Category[] }) {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
         <input
-          className="input" placeholder="Cari nama menu..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }}
+          className="input" placeholder="Cari nama menu..." value={searchInput}
+          onChange={e => { setSearchInput(e.target.value); setPage(1); }}
           style={{ width: 220 }}
         />
         <Select
@@ -523,7 +525,8 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
   const [data, setData] = useState<RecipeRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [venueId, setVenueId] = useState('');
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
@@ -539,13 +542,13 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp/recipes?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch.trim()) url += `&search=${encodeURIComponent(debouncedSearch.trim())}`;
     if (venueId) url += `&venue_id=${venueId}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, venueId, page, limit]);
+  }, [debouncedSearch, venueId, page, limit]);
 
   const openViewRecipe = async (id: number) => {
     setViewRecipeModal(id);
@@ -582,8 +585,8 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
     <>
       {toastInfo.show && <Toast isOpen={true} message={toastInfo.msg} type={toastInfo.type} onClose={() => setToastInfo({ ...toastInfo, show: false })} />}
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input className="input" placeholder="Cari nama resep..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ width: 220 }} />
+        <input className="input" placeholder="Cari nama resep..." value={searchInput}
+          onChange={e => { setSearchInput(e.target.value); setPage(1); }} style={{ width: 220 }} />
         <Select
           value={venueId}
           onChange={val => { setVenueId(String(val)); setPage(1); }}
@@ -728,7 +731,8 @@ function IngredientsTab() {
   const [data, setData] = useState<IngRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -769,12 +773,12 @@ function IngredientsTab() {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp/ingredients?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch.trim()) url += `&search=${encodeURIComponent(debouncedSearch.trim())}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, page, limit]);
+  }, [debouncedSearch, page, limit]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -855,8 +859,8 @@ function IngredientsTab() {
   return (
     <>
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-        <input className="input" placeholder="Cari nama bahan baku..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ width: 260 }} />
+        <input className="input" placeholder="Cari nama bahan baku..." value={searchInput}
+          onChange={e => { setSearchInput(e.target.value); setPage(1); }} style={{ width: 260 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
           <div style={{ width: 70 }}>
             <Select 
