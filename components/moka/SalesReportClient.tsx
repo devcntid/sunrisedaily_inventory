@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Calendar, Filter, RefreshCw, Download, Search, DollarSign, ShoppingCart, Percent, TrendingUp, TrendingDown, Store, Package, ChevronLeft, ChevronRight, BarChart2, Table as TableIcon } from 'lucide-react';
 import { Toast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
@@ -55,28 +56,27 @@ export default function SalesReportClient({ outlets, lastSync, initialSalesData,
 
     const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
 
-    const [searchTerm, setSearchTerm] = useState('');
     const [searchInput, setSearchInput] = useState('');
+    const debouncedSearch = useDebounce(searchInput, 400);
     const [isFiltering, setIsFiltering] = useState(false);
     const [page, setPage] = useState(1);
     const ITEMS_PER_PAGE = 20;
 
     useEffect(() => {
         setPage(1);
-    }, [searchTerm, selectedOutlet, startDate, endDate]);
+    }, [debouncedSearch, selectedOutlet, startDate, endDate]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
-        setSearchTerm(searchInput);
     };
 
     const filteredData = useMemo(() => {
         return initialSalesData.filter(item =>
-            item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))
+            item.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+            (item.sku && item.sku.toLowerCase().includes(debouncedSearch.toLowerCase()))
         );
-    }, [initialSalesData, searchTerm]);
+    }, [initialSalesData, debouncedSearch]);
 
     const totalUnitsSold = filteredData.reduce((sum, item) => sum + item.item_sold, 0);
     const totalGrossSales = filteredData.reduce((sum, item) => sum + item.gross_sales, 0);
@@ -309,11 +309,7 @@ export default function SalesReportClient({ outlets, lastSync, initialSalesData,
                                     type="text"
                                     placeholder="Cari barang..."
                                     value={searchInput}
-                                    onChange={(e) => {
-                                        setSearchInput(e.target.value);
-                                        setSearchTerm(e.target.value);
-                                        setPage(1);
-                                    }}
+                                    onChange={(e) => setSearchInput(e.target.value)}
                                     className="w-full text-[11px] border border-gray-200 rounded-md pl-6 pr-2 py-1 focus:outline-none focus:border-[#016e3f] bg-white shadow-sm"
                                 />
                                 <button type="submit" className="hidden">Cari</button>

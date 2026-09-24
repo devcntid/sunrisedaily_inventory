@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { Toast } from '@/components/ui/Toast';
 import { Image as ImageIcon } from 'lucide-react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 interface ReturnIssue {
   id: number;
@@ -39,11 +40,16 @@ export default function ReturnsPage() {
     isOpen: boolean; id: number | null; action: 'REPLACE' | 'WRITE_OFF' | null; notes: string;
   }>({ isOpen: false, id: null, action: null, notes: '' });
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState<{isOpen: boolean, message: string, type: 'error' | 'success' | 'info'}>({isOpen: false, message: '', type: 'info'});
   const ITEMS_PER_PAGE = 20;
   const lastCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const showToast = (message: string, type: 'error' | 'success' | 'info' = 'info') => setToast({isOpen: true, message, type});
   const hideToast = () => setToast(prev => ({...prev, isOpen: false}));
@@ -124,9 +130,9 @@ export default function ReturnsPage() {
   };
 
   const filteredIssues = issues.filter(i => 
-    i.delivery_note_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    i.outlet_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    i.item_name.toLowerCase().includes(searchQuery.toLowerCase())
+    i.delivery_note_number.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    i.outlet_name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    i.item_name.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
   const totalPages = Math.ceil(filteredIssues.length / ITEMS_PER_PAGE);
   const paginatedIssues = filteredIssues.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -177,11 +183,8 @@ export default function ReturnsPage() {
             )}
             <Input
               placeholder="Cari SJ / Outlet / Item..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               style={{ width: 200, fontSize: 13, height: 32 }}
             />
           </div>
@@ -191,7 +194,7 @@ export default function ReturnsPage() {
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Memuat...</div>
         ) : filteredIssues.length === 0 ? (
           <div style={{ padding: '48px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-            {searchQuery ? 'Data tidak ditemukan.' : (activeTab === 'PENDING' ? 'Tidak ada laporan masalah saat ini.' : 'Belum ada riwayat tindakan.')}
+            {debouncedSearch ? 'Data tidak ditemukan.' : (activeTab === 'PENDING' ? 'Tidak ada laporan masalah saat ini.' : 'Belum ada riwayat tindakan.')}
           </div>
         ) : (
           <div className="overflow-x-auto">

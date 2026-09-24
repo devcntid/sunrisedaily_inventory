@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { 
     ChevronDown, 
     ChevronRight, 
@@ -110,6 +111,7 @@ export default function MokaCatalogTableClient({
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<any>(null);
     const [searchInput, setSearchInput] = useState(activeSearch || '');
+    const debouncedSearch = useDebounce(searchInput, 400);
     
     const router = useRouter();
 
@@ -123,8 +125,14 @@ export default function MokaCatalogTableClient({
         router.push(qs ? `?${qs}` : '?');
     };
 
+    useEffect(() => {
+        if (debouncedSearch !== (activeSearch || '')) {
+            updateFilters(activeOutletId || '', debouncedSearch, activeStatus || 'all', 1);
+        }
+    }, [debouncedSearch]);
+
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        updateFilters(activeOutletId || '', activeSearch || '', e.target.value);
+        updateFilters(activeOutletId || '', debouncedSearch, e.target.value);
     };
 
     const handleSearch = (e: React.FormEvent) => {
@@ -218,11 +226,7 @@ export default function MokaCatalogTableClient({
                             className="input" 
                             placeholder="Cari menu Moka..." 
                             value={searchInput}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                setSearchInput(val);
-                                updateFilters(activeOutletId || '', val, activeStatus || 'all');
-                            }}
+                            onChange={(e) => setSearchInput(e.target.value)}
                             style={{ width: 240 }}
                         />
                     </form>

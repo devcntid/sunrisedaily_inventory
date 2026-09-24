@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Search, RefreshCw, CreditCard, X, Loader2, Calendar, Store, TrendingUp, TrendingDown, ShoppingCart, DollarSign, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Toast } from '@/components/ui/Toast';
@@ -12,7 +13,8 @@ interface Outlet {
 }
 
 export default function TransactionTableClient({ outlets }: { outlets: Outlet[] }) {
-    const [search, setSearch] = useState('');
+    const [searchInput, setSearchInput] = useState('');
+    const debouncedSearch = useDebounce(searchInput, 400);
     const [outletId, setOutletId] = useState('');
 
     const [startDate, setStartDate] = useState(() => {
@@ -44,9 +46,13 @@ export default function TransactionTableClient({ outlets }: { outlets: Outlet[] 
         return res.json();
     };
 
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch]);
+
     const { data, isLoading, refetch } = useQuery({
-        queryKey: ['moka-transactions', page, search, outletId, startDate, endDate],
-        queryFn: () => fetchTransactions(page, search, outletId, startDate, endDate),
+        queryKey: ['moka-transactions', page, debouncedSearch, outletId, startDate, endDate],
+        queryFn: () => fetchTransactions(page, debouncedSearch, outletId, startDate, endDate),
         placeholderData: (prev) => prev
     });
 
@@ -167,8 +173,8 @@ export default function TransactionTableClient({ outlets }: { outlets: Outlet[] 
                             <input
                                 type="text"
                                 placeholder="Cari no struk / kasir..."
-                                value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
                                 className="bg-white border border-gray-200 text-[12px] text-gray-700 rounded-md pl-7 pr-2.5 py-1 w-[180px] shadow-sm focus:outline-none focus:border-[#016e3f] placeholder-gray-400"
                             />
                         </div>
