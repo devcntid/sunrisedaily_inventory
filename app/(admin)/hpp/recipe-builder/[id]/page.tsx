@@ -363,7 +363,7 @@ export default function RecipeBuilderPage({ params: paramsPromise }: { params: P
             />
 
             <div className="form-group" style={{ marginBottom: undefined }}>
-              <label className="form-label req">Kategori</label>
+              <label className="form-label req">Label</label>
               <select required className="input" style={{ width: '100%', height: 34, fontSize: 12 }} value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))}>
                 <option value="">Pilih...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

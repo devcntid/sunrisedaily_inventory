@@ -130,7 +130,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
           value={catId}
           onChange={val => { setCatId(String(val)); setPage(1); }}
           options={[
-            { value: '', label: 'Semua Kategori' },
+            { value: '', label: 'Semua Label' },
             ...categories.map(c => ({ value: String(c.id), label: c.name }))
           ]}
           style={{ width: 180 }}
@@ -220,7 +220,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
           <Table>
             <thead>
               <tr>
-                <th>Kategori</th>
+                <th>Label</th>
                 <th>Menu / Varian</th>
                 <th className="right">Harga Jual</th>
                 <th className="right">HPP</th>
