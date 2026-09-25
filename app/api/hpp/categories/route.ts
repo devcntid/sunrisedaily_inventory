@@ -22,11 +22,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   try {
     const cat = await createHppCategory(body.name);
-    return NextResponse.json({ success: true, message: 'Kategori berhasil ditambahkan', data: cat }, { status: 201 });
+    return NextResponse.json({ success: true, message: 'Label berhasil ditambahkan', data: cat }, { status: 201 });
   } catch (err: unknown) {
     const pgError = err as { code?: string };
     if (pgError.code === '23505') {
-      return NextResponse.json({ success: false, message: 'Nama kategori ini sudah digunakan' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Nama label ini sudah digunakan' }, { status: 400 });
     }
     return NextResponse.json({ success: false, message: (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 });
   }
@@ -40,11 +40,11 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   try {
     const cat = await updateHppCategory(Number(body.id), body.name);
-    return NextResponse.json({ success: true, message: 'Kategori berhasil diperbarui', data: cat });
+    return NextResponse.json({ success: true, message: 'Label berhasil diperbarui', data: cat });
   } catch (err: unknown) {
     const pgError = err as { code?: string };
     if (pgError.code === '23505') {
-      return NextResponse.json({ success: false, message: 'Nama kategori ini sudah digunakan' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Nama label ini sudah digunakan' }, { status: 400 });
     }
     return NextResponse.json({ success: false, message: (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 });
   }
@@ -60,11 +60,11 @@ export async function DELETE(req: NextRequest) {
   
   try {
     await deleteHppCategory(Number(id));
-    return NextResponse.json({ success: true, message: 'Kategori berhasil dihapus' });
+    return NextResponse.json({ success: true, message: 'Label berhasil dihapus' });
   } catch (err: unknown) {
     const pgError = err as { code?: string };
     if (pgError.code === '23503') {
-      return NextResponse.json({ success: false, message: 'Kategori tidak dapat dihapus karena masih digunakan pada menu/produk.' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Label tidak dapat dihapus karena masih digunakan pada menu/produk.' }, { status: 400 });
     }
     return NextResponse.json({ success: false, message: (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 });
   }

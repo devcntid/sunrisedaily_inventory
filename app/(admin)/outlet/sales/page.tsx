@@ -315,7 +315,7 @@ export default function SalesAnalyticsPage() {
                   value={selectedCategory}
                   onChange={(val) => setSelectedCategory(String(val))}
                   options={[
-                    { value: '', label: 'Semua Kategori' },
+                    { value: '', label: 'Semua Label' },
                     ...categories.map(c => ({ value: c, label: c }))
                   ]}
                   style={{ width: 145 }}
@@ -405,7 +405,7 @@ export default function SalesAnalyticsPage() {
                   <thead>
                     <tr>
                       <th style={{ width: '40%' }}>Nama Menu</th>
-                      <th>Kategori</th>
+                      <th>Label</th>
                       <th className="right">Harga Jual</th>
                       <th className="right">Jml Terjual</th>
                       <th className="right">Total Pendapatan</th>

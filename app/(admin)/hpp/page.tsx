@@ -223,7 +223,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
           value={catId}
           onChange={val => { setCatId(String(val)); setPage(1); }}
           options={[
-            { value: '', label: 'Semua Kategori' },
+            { value: '', label: 'Semua Label' },
             ...categories.map(c => ({ value: String(c.id), label: c.name }))
           ]}
           style={{ width: 180 }}
@@ -308,7 +308,7 @@ function MenusTab({ categories }: { categories: Category[] }) {
             <Table>
               <thead>
                 <tr>
-                  <th>Kategori</th>
+                  <th>Label</th>
                   <th>Menu</th>
                   <th className="right">Harga Jual</th>
                   <th className="right">HPP</th>
@@ -1156,7 +1156,7 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
   useEffect(() => { fetchCats(); }, [fetchCats]);
 
   async function handleAddSave() {
-    if (!addName.trim()) { setToastInfo({ show: true, msg: 'Nama kategori wajib diisi', type: 'error' }); return; }
+    if (!addName.trim()) { setToastInfo({ show: true, msg: 'Nama label wajib diisi', type: 'error' }); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/hpp/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: addName }) });
@@ -1172,7 +1172,7 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
   }
 
   async function handleEditSave(id: number) {
-    if (!editName.trim()) { setToastInfo({ show: true, msg: 'Nama kategori wajib diisi', type: 'error' }); return; }
+    if (!editName.trim()) { setToastInfo({ show: true, msg: 'Nama label wajib diisi', type: 'error' }); return; }
     setSaving(true);
     try {
       const res = await fetch('/api/hpp/categories', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: editName }) });
@@ -1211,9 +1211,9 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
       
       <div style={{ maxWidth: 700, margin: '0 auto', background: '#fff', borderRadius: 8, border: '1px solid var(--border)', marginTop: 24, overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
-          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Daftar Kategori</h4>
+          <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Daftar Label</h4>
           <button className="btn btn-sm btn-primary" onClick={() => { setAddName(''); setShowAddModal(true); }}>
-            + Tambah Kategori
+            + Tambah Label
           </button>
         </div>
         <div className="table-responsive">
@@ -1221,7 +1221,7 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
             <thead>
               <tr>
                 <th style={{ width: 60, textAlign: 'center' }}>No.</th>
-                <th>Nama Kategori</th>
+                <th>Nama Label</th>
                 <th style={{ width: 120, textAlign: 'center' }}>Aksi</th>
               </tr>
             </thead>
@@ -1229,7 +1229,7 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
               {loading ? (
                 <tr><td colSpan={3} style={{ textAlign: 'center', padding: 40 }} className="muted">Memuat data...</td></tr>
               ) : paginatedCats.length === 0 ? (
-                <tr><td colSpan={3} style={{ textAlign: 'center', padding: 40 }} className="muted">Tidak ada kategori.</td></tr>
+                <tr><td colSpan={3} style={{ textAlign: 'center', padding: 40 }} className="muted">Tidak ada label.</td></tr>
               ) : paginatedCats.map((c, i) => (
                 <tr key={c.id}>
                   <td style={{ textAlign: 'center' }}>{(page - 1) * ITEMS_PER_PAGE + i + 1}</td>
@@ -1272,16 +1272,16 @@ function CategoriesTab({ onUpdated }: { onUpdated?: () => void }) {
         </div>
       )}
 
-      <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Tambah Kategori">
+      <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Tambah Label">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Input label="Nama Kategori" value={addName} onChange={e => setAddName(e.target.value)} required placeholder="Misal: Minuman Dingin" autoFocus />
+          <Input label="Nama Label" value={addName} onChange={e => setAddName(e.target.value)} required placeholder="Misal: Minuman Dingin" autoFocus />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>Batal</button>
             <button className="btn btn-primary" onClick={handleAddSave} disabled={saving}>Simpan</button>
           </div>
         </div>
       </Modal>
-      <ConfirmDialog open={!!confirmDelete} title="Hapus Kategori" message={`Yakin ingin menghapus kategori "${confirmDelete?.name}"?`} confirmText="Hapus" onConfirm={executeDelete} onCancel={() => setConfirmDelete(null)} />
+      <ConfirmDialog open={!!confirmDelete} title="Hapus Label" message={`Yakin ingin menghapus label "${confirmDelete?.name}"?`} confirmText="Hapus" onConfirm={executeDelete} onCancel={() => setConfirmDelete(null)} />
     </div>
   );
 }
@@ -1306,7 +1306,7 @@ export default function HppPage() {
   const tabDefs = [
     { key: 'menus', label: 'Menu POS & Resep' },
     { key: 'ingredients', label: 'Bahan Baku' },
-    { key: 'categories', label: 'Kategori Menu' },
+    { key: 'categories', label: 'Label' },
   ] as const;
 
   const marginMap = (stats?.marginBreakdown ?? []).reduce((a, b) => ({ ...a, [b.flag]: b.count }), {} as Record<string, number>);
