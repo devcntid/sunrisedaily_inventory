@@ -1295,9 +1295,11 @@ export default function ItemsPage() {
                             const newBrands = [...brands];
                             newBrands[i].purchase_unit = e.target.value;
                             setBrands(newBrands);
-                          }} style={{ fontSize: 13, padding: '8px 12px' }}>
-                            <option value="">-- Pilih --</option>
-                            {PURCHASE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                          }} style={{ fontSize: 12, padding: '6px 20px 6px 8px' }}>
+                            <option value="">-- Pilih Satuan --</option>
+                            {getUniqueUnits(PURCHASE_UNITS, items.map(item => item.purchase_unit)).map(u => (
+                              <option key={u.value} value={u.value}>{u.label}</option>
+                            ))}
                           </select>
                         </div>
                         <div className="form-group" style={{ marginBottom: 0, flex: '1 1 100px' }}>
