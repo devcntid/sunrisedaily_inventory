@@ -1287,13 +1287,13 @@ export default function ItemsPage() {
                             setBrands(newBrands);
                           }} style={{ fontSize: 13, padding: '8px 12px' }} />
                         </div>
-                        <div className="form-group" style={{ marginBottom: 0, flex: '1.2 1 145px', minWidth: 140 }}>
+                        <div className="form-group" style={{ marginBottom: 0, flex: '1 1 120px' }}>
                           {i === 0 && <label className="form-label" style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)' }}>Satuan Beli</label>}
                           <select className="input" value={brand.purchase_unit} disabled={brand.is_active === false} onChange={e => {
                             const newBrands = [...brands];
                             newBrands[i].purchase_unit = e.target.value;
                             setBrands(newBrands);
-                          }} style={{ fontSize: 13, padding: '6px 28px 6px 10px', height: 36 }}>
+                          }} style={{ fontSize: 12, padding: '6px 20px 6px 8px' }}>
                             <option value="">-- Pilih Satuan --</option>
                             {getUniqueUnits(PURCHASE_UNITS, items.map(item => item.purchase_unit)).map(u => (
                               <option key={u.value} value={u.value}>{u.label}</option>
