@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import Link from 'next/link';
 import { Table } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
@@ -27,7 +28,8 @@ export default function StockCardPage() {
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -66,7 +68,7 @@ export default function StockCardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, catFilter, statusFilter]);
+  }, [debouncedSearch, catFilter, statusFilter]);
 
   const selectedItem = items.find(i => String(i.id) === selectedItemId);
 
@@ -77,8 +79,9 @@ export default function StockCardPage() {
   const lastOut = logs.find(l => l.movement_type === 'OUT')?.created_at;
 
   const filteredItems = items.filter((i: any) => {
-    if (search) {
-      if (!i.name.toLowerCase().includes(search.toLowerCase()) && !String(i.id).includes(search)) return false;
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.trim().toLowerCase();
+      if (!i.name.toLowerCase().includes(q) && !String(i.id).includes(q)) return false;
     }
     if (catFilter && String(i.category_id) !== catFilter) return false;
     if (statusFilter) {
@@ -126,8 +129,8 @@ export default function StockCardPage() {
             <input
               className="input"
               placeholder="Cari nama barang..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               style={{ width: 200 }}
             />
             <Select

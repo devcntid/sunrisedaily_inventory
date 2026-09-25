@@ -14,6 +14,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { FileText } from 'lucide-react';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 interface ShoppingListItemState {
   checked: boolean;
@@ -92,11 +93,17 @@ function RequestsContent() {
   const [histories, setHistories] = useState<any[]>([]);
   const [aggregatedProducts, setAggregatedProducts] = useState<AggregatedProduct[]>([]);
   const [aggCurrentPage, setAggCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [selectedAggProduct, setSelectedAggProduct] = useState<AggregatedProduct | null>(null);
   const [shoppingListState, setShoppingListState] = useState<Record<number, ShoppingListItemState>>({});
   const [showPrintConfirm, setShowPrintConfirm] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setAggCurrentPage(1);
+  }, [debouncedSearch]);
 
   const ITEMS_PER_PAGE = 25;
   const AGG_ITEMS_PER_PAGE = 20;
@@ -383,8 +390,8 @@ function RequestsContent() {
               className="input"
               style={{ width: 200 }}
               placeholder={viewMode === 'by-outlet' ? 'Cari PO atau Outlet...' : 'Cari nama barang...'}
-              value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setAggCurrentPage(1); }}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
             />
             <input
               type="date"
@@ -479,7 +486,7 @@ function RequestsContent() {
                     </thead>
                     <tbody>
                       {(() => {
-                        const filteredAgg = aggregatedProducts.filter(p => p.item_name.toLowerCase().includes(searchQuery.toLowerCase()));
+                        const filteredAgg = aggregatedProducts.filter(p => p.item_name.toLowerCase().includes(debouncedSearch.toLowerCase()));
                         return filteredAgg.slice((aggCurrentPage - 1) * AGG_ITEMS_PER_PAGE, aggCurrentPage * AGG_ITEMS_PER_PAGE).map(p => {
                           const ratio = Number(p.conversion_ratio) || 1;
                           const neededPurchase = Number(p.total_requested) || 0;
@@ -569,7 +576,7 @@ function RequestsContent() {
                   </Table>
                 </div>
                 {(() => {
-                  const filteredAgg = aggregatedProducts.filter(p => p.item_name.toLowerCase().includes(searchQuery.toLowerCase()));
+                  const filteredAgg = aggregatedProducts.filter(p => p.item_name.toLowerCase().includes(debouncedSearch.toLowerCase()));
                   if (filteredAgg.length <= AGG_ITEMS_PER_PAGE) return null;
                   return (
                     <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
@@ -607,8 +614,8 @@ function RequestsContent() {
                 <tbody>
                   {(() => {
                     const filteredOrders = orders.filter(o =>
-                      o.outlet_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      `PO-${new Date(o.order_date).getFullYear()}-${String(o.id).padStart(5, '0')}`.toLowerCase().includes(searchQuery.toLowerCase())
+                      o.outlet_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                      `PO-${new Date(o.order_date).getFullYear()}-${String(o.id).padStart(5, '0')}`.toLowerCase().includes(debouncedSearch.toLowerCase())
                     );
                     return filteredOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map(o => (
                       <tr
@@ -632,8 +639,8 @@ function RequestsContent() {
 
               {(() => {
                 const filteredOrders = orders.filter(o =>
-                  o.outlet_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  `PO-${new Date(o.order_date).getFullYear()}-${String(o.id).padStart(5, '0')}`.toLowerCase().includes(searchQuery.toLowerCase())
+                  o.outlet_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                  `PO-${new Date(o.order_date).getFullYear()}-${String(o.id).padStart(5, '0')}`.toLowerCase().includes(debouncedSearch.toLowerCase())
                 );
                 if (filteredOrders.length <= ITEMS_PER_PAGE) return null;
                 return (

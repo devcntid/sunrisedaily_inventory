@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { RefreshCcw, Search, Info, Calendar, DollarSign, Package, Download, Zap, Loader2, Bell, Store, AlertCircle, X, ExternalLink, Clock, AlertTriangle, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import { CombinedStockView } from './CombinedStockView';
 import { DistributionHistoryView } from './DistributionHistoryView';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 interface Outlet {
   id: number;
@@ -73,7 +74,8 @@ export default function StockMonitoringPage() {
     message: '',
     onConfirm: () => {}
   });
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [filterOutlet, setFilterOutlet] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, KRITIS, AMAN
   const [filterCategory, setFilterCategory] = useState('ALL');
@@ -390,8 +392,8 @@ export default function StockMonitoringPage() {
   const filteredItems = useMemo(() => {
     if (!data?.items) return [];
     return data.items.filter((item: Item) => {
-      const matchSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchSearch = item.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (item.sku && item.sku.toLowerCase().includes(debouncedSearch.toLowerCase()));
 
       if (!matchSearch) return false;
       if (appliedFilterCategory !== 'ALL' && String(item.category_id) !== appliedFilterCategory) return false;
@@ -425,12 +427,12 @@ export default function StockMonitoringPage() {
 
       return hasStatus;
     });
-  }, [data, searchTerm, appliedFilterCategory, appliedFilterOutlet, appliedFilterStatus]);
+  }, [data, debouncedSearch, appliedFilterCategory, appliedFilterOutlet, appliedFilterStatus]);
 
-  // Reset page when itemsPerPage or searchTerm changes
+  // Reset page when itemsPerPage or debouncedSearch changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [itemsPerPage, searchTerm]);
+  }, [itemsPerPage, debouncedSearch]);
 
   const visibleOutlets = appliedFilterOutlet === 'ALL'
     ? (data?.outlets || [])
@@ -608,8 +610,8 @@ export default function StockMonitoringPage() {
                     type="text"
                     className="input"
                     placeholder="Cari barang/SKU..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
                     style={{ width: 180, padding: '6px 12px 6px 30px', fontSize: 12 }}
                   />
                 </div>

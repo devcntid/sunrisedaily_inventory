@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Table } from '@/components/ui/Table';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -158,7 +159,8 @@ export default function ItemsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [catFilter, setCatFilter] = useState('');
   const [filterPerishable, setFilterPerishable] = useState('');
   const [filterStockStatus, setFilterStockStatus] = useState('');
@@ -282,18 +284,18 @@ export default function ItemsPage() {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({ active_only: 'false' });
-    if (search) params.set('search', search);
+    if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
     if (catFilter) params.set('category_id', catFilter);
     const res = await fetch(`/api/items?${params}`);
     const data = await res.json();
     setItems(data.data ?? []);
     setLoading(false);
-  }, [search, catFilter]);
+  }, [debouncedSearch, catFilter]);
 
   // Reset to page 1 only when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, catFilter, filterPerishable, filterStockStatus]);
+  }, [debouncedSearch, catFilter, filterPerishable, filterStockStatus]);
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.data ?? []));
@@ -656,8 +658,8 @@ export default function ItemsPage() {
                 className="input"
                 placeholder="Cari nama barang atau SKU..."
                 style={{ width: '220px', height: 34 }}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
               />
               <Select
                 value={catFilter}
@@ -703,11 +705,11 @@ export default function ItemsPage() {
                 style={{ width: 75 }}
                 inputStyle={{ height: 34 }}
               />
-              {(search || catFilter || filterPerishable || filterStockStatus) && (
+              {(searchInput || catFilter || filterPerishable || filterStockStatus) && (
                 <button
                   type="button"
                   onClick={() => {
-                    setSearch('');
+                    setSearchInput('');
                     setCatFilter('');
                     setFilterPerishable('');
                     setFilterStockStatus('');

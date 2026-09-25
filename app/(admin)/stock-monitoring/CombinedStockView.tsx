@@ -5,6 +5,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Search, Download, AlertTriangle, Clock, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Select } from '@/components/ui/Select';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 interface CombinedStock {
   id: number;
@@ -26,7 +27,8 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
   const [data, setData] = useState<CombinedStock[]>([]);
   const [outlets, setOutlets] = useState<{ id: number, name: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [filterCategory, setFilterCategory] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -48,11 +50,11 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, filterCategory, filterStatus]);
+  }, [debouncedSearch, filterCategory, filterStatus]);
 
   const filteredData = data.filter(item => {
     // Search
-    const matchSearch = item.item_name.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = item.item_name.toLowerCase().includes(debouncedSearch.toLowerCase());
     if (!matchSearch) return false;
 
     // Category
@@ -189,8 +191,8 @@ export function CombinedStockView({ categories = [] }: { categories?: { id: numb
                 type="text"
                 className="input"
                 placeholder="Cari barang/SKU..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
                 style={{ width: 180, padding: '6px 12px 6px 30px', fontSize: 12 }}
               />
             </div>

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { FileText, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 interface DeliveryNote {
   id: number;
@@ -27,9 +28,13 @@ export default function DeliveryOrdersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [outletFilter, setOutletFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [outlets, setOutlets] = useState<{id: number, name: string}[]>([]);
   const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     fetch('/api/outlets')
@@ -47,7 +52,7 @@ export default function DeliveryOrdersPage() {
       });
       if (statusFilter) params.append('status', statusFilter);
       if (outletFilter) params.append('outlet_id', outletFilter);
-      if (searchQuery) params.append('search', searchQuery);
+      if (debouncedSearch) params.append('search', debouncedSearch);
 
       const res = await fetch(`/api/delivery-notes?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json();
@@ -57,7 +62,7 @@ export default function DeliveryOrdersPage() {
     } finally {
       if (!isQuiet) setLoading(false);
     }
-  }, [page, statusFilter, outletFilter, searchQuery]);
+  }, [page, statusFilter, outletFilter, debouncedSearch]);
 
   useEffect(() => { 
     fetchNotes(false);
@@ -91,18 +96,11 @@ export default function DeliveryOrdersPage() {
                 placeholder="Cari No. SJ..." 
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    setSearchQuery(searchInput);
-                    setPage(1);
-                  }
-                }}
                 style={{ paddingRight: 32 }}
               />
               <Search 
                 size={16} 
-                style={{ position: 'absolute', right: 10, top: 10, color: '#94a3b8', cursor: 'pointer' }} 
-                onClick={() => { setSearchQuery(searchInput); setPage(1); }}
+                style={{ position: 'absolute', right: 10, top: 10, color: '#94a3b8' }} 
               />
             </div>
             <div style={{ width: 180 }}>

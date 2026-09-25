@@ -4,6 +4,7 @@ import { Table } from '@/components/ui/Table';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 type OutletStockRow = {
   item_id: number;
@@ -27,11 +28,16 @@ function formatUnit(unit: string | null | undefined): string {
 export default function OutletInventoryStockPage() {
   const [data, setData] = useState<OutletStockRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(15);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -88,11 +94,11 @@ export default function OutletInventoryStockPage() {
 
     const matchCategory = !categoryFilter || d.category_name === categoryFilter;
     const matchStatus = !statusFilter || status === statusFilter;
-    const matchSearch = !search.trim() || (() => {
+    const matchSearch = !debouncedSearch.trim() || (() => {
       const code = `ERC${String(d.item_id).padStart(6, '0')}`;
-      return d.item_name.toLowerCase().includes(search.toLowerCase()) ||
-        code.toLowerCase().includes(search.toLowerCase()) ||
-        (d.barcode && d.barcode.toLowerCase().includes(search.toLowerCase()));
+      return d.item_name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        code.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (d.barcode && d.barcode.toLowerCase().includes(debouncedSearch.toLowerCase()));
     })();
 
     return matchCategory && matchStatus && matchSearch;
@@ -119,8 +125,8 @@ export default function OutletInventoryStockPage() {
                   className="input"
                   style={{ paddingLeft: 30, height: 32, fontSize: 13, width: '100%' }}
                   placeholder="Cari barang/barcode..."
-                  value={search}
-                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
                 />
               </div>
               <Select

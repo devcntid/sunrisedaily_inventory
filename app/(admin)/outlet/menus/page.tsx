@@ -7,6 +7,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Toast } from '@/components/ui/Toast';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 // ─── Types ───────────────────────────────────────────────────
 type Category = { id: number; name: string };
@@ -76,11 +77,16 @@ function MenusTab({ categories }: { categories: Category[] }) {
   const [data, setData] = useState<MenuRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [catId, setCatId] = useState('');
   const [marginFlag, setMarginFlag] = useState('');
   const [page, setPage] = useState(1);
   const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const [detailModal, setDetailModal] = useState<number | null>(null);
   const [detailData, setDetailData] = useState<any>(null);
@@ -88,14 +94,14 @@ function MenusTab({ categories }: { categories: Category[] }) {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
     if (catId) url += `&category_id=${catId}`;
     if (marginFlag) url += `&margin_flag=${marginFlag}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, catId, marginFlag, page]);
+  }, [debouncedSearch, catId, marginFlag, page]);
 
 
   const openDetail = async (menuId: number) => {
@@ -122,8 +128,8 @@ function MenusTab({ categories }: { categories: Category[] }) {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
         <input
-          className="input" placeholder="Cari nama menu..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }}
+          className="input" placeholder="Cari nama menu..." value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
           style={{ width: 220 }}
         />
         <Select
@@ -334,13 +340,18 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
   const [data, setData] = useState<RecipeRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [venueId, setVenueId] = useState('');
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [toastInfo, setToastInfo] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'info' });
   const [deleting, setDeleting] = useState(false);
   const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const [viewRecipeModal, setViewRecipeModal] = useState<number | null>(null);
   const [viewRecipeData, setViewRecipeData] = useState<any>(null);
@@ -350,13 +361,13 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp/recipes?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
     if (venueId) url += `&venue_id=${venueId}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, venueId, page]);
+  }, [debouncedSearch, venueId, page]);
 
   const openViewRecipe = async (id: number) => {
     setViewRecipeModal(id);
@@ -393,8 +404,8 @@ function RecipesTab({ venues }: { venues: Venue[] }) {
     <>
       {toastInfo.show && <Toast isOpen={true} message={toastInfo.msg} type={toastInfo.type} onClose={() => setToastInfo({ ...toastInfo, show: false })} />}
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input className="input" placeholder="Cari nama resep..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ width: 220 }} />
+        <input className="input" placeholder="Cari nama resep..." value={searchInput}
+          onChange={e => setSearchInput(e.target.value)} style={{ width: 220 }} />
         <Select
           value={venueId}
           onChange={val => { setVenueId(String(val)); setPage(1); }}
@@ -518,12 +529,17 @@ function IngredientsTab() {
   const [masterItems, setMasterItems] = useState<Record<string, unknown>[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   const [page, setPage] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [toastInfo, setToastInfo] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'info' });
   const [deleting, setDeleting] = useState(false);
   const limit = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -533,12 +549,12 @@ function IngredientsTab() {
   const load = useCallback(() => {
     setLoading(true);
     let url = `/api/hpp/ingredients?limit=${limit}&page=${page}`;
-    if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (debouncedSearch) url += `&search=${encodeURIComponent(debouncedSearch)}`;
     fetch(url)
       .then(r => r.json())
       .then(d => { setData(d.data ?? []); setTotal(d.total ?? 0); })
       .finally(() => setLoading(false));
-  }, [search, page]);
+  }, [debouncedSearch, page]);
 
   useEffect(() => {
     load();
@@ -615,8 +631,8 @@ function IngredientsTab() {
     <>
       {toastInfo.show && <Toast isOpen={true} message={toastInfo.msg} type={toastInfo.type} onClose={() => setToastInfo({ ...toastInfo, show: false })} />}
       <div style={{ display: 'flex', gap: 12, padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input className="input" placeholder="Cari nama bahan baku..." value={search}
-          onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ width: 260 }} />
+        <input className="input" placeholder="Cari nama bahan baku..." value={searchInput}
+          onChange={e => setSearchInput(e.target.value)} style={{ width: 260 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto' }}>
           <span className="muted" style={{ fontSize: 12 }}>{total} bahan baku</span>
           {totalPages > 1 && (

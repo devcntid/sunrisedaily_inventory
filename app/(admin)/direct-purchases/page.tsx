@@ -8,6 +8,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Plus, Search, MapPin } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { OrderStatusBadge } from '@/components/shared/OrderStatusBadge';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 
 
 interface DirectPurchase {
@@ -23,7 +24,8 @@ interface DirectPurchase {
 export default function DirectPurchasesPage() {
   const [purchases, setPurchases] = useState<DirectPurchase[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 400);
   
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -66,8 +68,8 @@ export default function DirectPurchasesPage() {
   }, [fetchPurchases]);
 
   const filtered = purchases.filter(p => 
-    p.receipt_number?.toLowerCase().includes(search.toLowerCase()) ||
-    p.notes?.toLowerCase().includes(search.toLowerCase())
+    p.receipt_number?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.notes?.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   return (
@@ -86,8 +88,8 @@ export default function DirectPurchasesPage() {
                 placeholder="Cari referensi atau catatan..."
                 className="input"
                 style={{ width: '100%', paddingLeft: 36 }}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
               />
             </div>
             <Link href="/direct-purchases/create">

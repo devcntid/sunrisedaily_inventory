@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { Search, RefreshCw, Users, Mail, Phone, ChevronDown, ChevronRight } from 'lucide-react';
 import { Toast } from '@/components/ui/Toast';
 
 export default function CustomerTableClient({ outletsGrouped, activeOutletId }: { outletsGrouped?: Record<string, { id: number; name: string }[]>, activeOutletId?: string }) {
-    const [searchTerm, setSearchTerm] = useState('');
     const [searchInput, setSearchInput] = useState('');
+    const debouncedSearch = useDebounce(searchInput, 400);
     const [sort, setSort] = useState('newest');
     const [hasEmail, setHasEmail] = useState('all');
     const [outletId, setOutletId] = useState(activeOutletId || '');
@@ -34,7 +35,7 @@ export default function CustomerTableClient({ outletsGrouped, activeOutletId }: 
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`/api/moka/customers?page=${page}&limit=${ITEMS_PER_PAGE}&search=${encodeURIComponent(searchTerm)}&sort=${sort}&hasEmail=${hasEmail}&outlet_id=${outletId}`);
+            const res = await fetch(`/api/moka/customers?page=${page}&limit=${ITEMS_PER_PAGE}&search=${encodeURIComponent(debouncedSearch.trim())}&sort=${sort}&hasEmail=${hasEmail}&outlet_id=${outletId}`);
             const json = await res.json();
             if (json.success) {
                 setData(json.data);
@@ -48,13 +49,16 @@ export default function CustomerTableClient({ outletsGrouped, activeOutletId }: 
     };
 
     useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch]);
+
+    useEffect(() => {
         fetchData();
-    }, [page, searchTerm, sort, hasEmail, outletId]);
+    }, [page, debouncedSearch, sort, hasEmail, outletId]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setPage(1);
-        setSearchTerm(searchInput);
     };
 
     const handleSync = async () => {
@@ -117,12 +121,7 @@ export default function CustomerTableClient({ outletsGrouped, activeOutletId }: 
                                 type="text"
                                 placeholder="Cari nama atau telepon..."
                                 value={searchInput}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    setSearchInput(val);
-                                    setSearchTerm(val);
-                                    setPage(1);
-                                }}
+                                onChange={(e) => setSearchInput(e.target.value)}
                                 className="w-full text-[12px] border border-gray-200 rounded-md pl-8 pr-3 py-1.5 focus:outline-none focus:border-[#016e3f] focus:ring-1 focus:ring-[#016e3f] bg-white shadow-sm"
                             />
                             <button type="submit" className="hidden">Cari</button>
