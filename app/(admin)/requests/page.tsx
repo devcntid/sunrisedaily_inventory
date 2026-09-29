@@ -487,6 +487,15 @@ function RequestsContent() {
                     <tbody>
                       {(() => {
                         const filteredAgg = aggregatedProducts.filter(p => p.item_name.toLowerCase().includes(debouncedSearch.toLowerCase()));
+                        if (filteredAgg.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={8} className="center muted" style={{ padding: '40px 16px' }}>
+                                Tidak ada produk permintaan yang sesuai dengan pencarian.
+                              </td>
+                            </tr>
+                          );
+                        }
                         return filteredAgg.slice((aggCurrentPage - 1) * AGG_ITEMS_PER_PAGE, aggCurrentPage * AGG_ITEMS_PER_PAGE).map(p => {
                           const ratio = Number(p.conversion_ratio) || 1;
                           const neededPurchase = Number(p.total_requested) || 0;
@@ -617,6 +626,15 @@ function RequestsContent() {
                       o.outlet_name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
                       `PO-${new Date(o.order_date).getFullYear()}-${String(o.id).padStart(5, '0')}`.toLowerCase().includes(debouncedSearch.toLowerCase())
                     );
+                    if (filteredOrders.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="center muted" style={{ padding: '40px 16px' }}>
+                            Tidak ada data permintaan outlet yang sesuai dengan pencarian/filter.
+                          </td>
+                        </tr>
+                      );
+                    }
                     return filteredOrders.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map(o => (
                       <tr
                         key={o.id}
