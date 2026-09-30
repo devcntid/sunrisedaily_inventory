@@ -246,22 +246,25 @@ export default function ItemsPage() {
   }
 
   function toggleSelectAll() {
-    if (selectedItems.length === filteredItems.length) {
-      setSelectedItems([]);
+    const activeIds = paginatedItems.map(i => i.id);
+    const isAllSelected = activeIds.length > 0 && activeIds.every(id => selectedItems.includes(id));
+    if (isAllSelected) {
+      setSelectedItems(prev => prev.filter(id => !activeIds.includes(id)));
     } else {
-      setSelectedItems(filteredItems.map(i => i.id));
+      setSelectedItems(Array.from(new Set([...selectedItems, ...activeIds])));
     }
   }
 
   async function handleBulkSave() {
-    if (selectedItems.length === 0) return;
+    const validSelectedIds = selectedItems.filter(id => paginatedItems.some(item => item.id === id));
+    if (validSelectedIds.length === 0) return;
     setBulkSaving(true);
     try {
       const res = await fetch('/api/items/bulk-venue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          item_ids: selectedItems,
+          item_ids: validSelectedIds,
           is_global: bulkForm.is_global,
           venue_ids: bulkForm.is_global ? [] : bulkForm.venue_ids
         })
@@ -292,10 +295,10 @@ export default function ItemsPage() {
     setLoading(false);
   }, [debouncedSearch, catFilter]);
 
-  // Reset to page 1 only when filters change
+  // Reset to page 1 when filters or itemsPerPage change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, catFilter, filterPerishable, filterStockStatus]);
+  }, [debouncedSearch, catFilter, filterPerishable, filterStockStatus, itemsPerPage]);
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.data ?? []));
@@ -640,6 +643,19 @@ export default function ItemsPage() {
   const paginatedItems = filteredItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
 
+  // Synchronize selection with currently visible/paginated items
+  useEffect(() => {
+    setSelectedItems(prev => {
+      if (prev.length === 0) return prev;
+      const visibleIds = new Set(paginatedItems.map(item => item.id));
+      const next = prev.filter(id => visibleIds.has(id));
+      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [paginatedItems]);
+
   const matchingExistingItems = items
     .filter(i => i.name.toLowerCase().includes(form.name.trim().toLowerCase()))
     .slice(0, 8);
@@ -696,7 +712,10 @@ export default function ItemsPage() {
               />
               <Select
                 value={String(itemsPerPage)}
-                onChange={(val: any) => { setItemsPerPage(Number(val)); setCurrentPage(1); }}
+                onChange={(val: any) => {
+                  setItemsPerPage(Number(val));
+                  setCurrentPage(1);
+                }}
                 options={[
                   { value: '20', label: '20' },
                   { value: '50', label: '50' },
@@ -713,6 +732,7 @@ export default function ItemsPage() {
                     setCatFilter('');
                     setFilterPerishable('');
                     setFilterStockStatus('');
+                    setSelectedItems([]);
                   }}
                   style={{
                     background: '#fef2f2',
